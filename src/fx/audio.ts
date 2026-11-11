@@ -181,6 +181,34 @@ export class Sfx {
     this.tone({ type: 'square', f0: 1300, dur: 0.025, gain: 0.08, wet: 0 });
   }
 
+  /** Magazine released and dropping out. */
+  magOut(): void {
+    if (!this.gate('magout', 60)) return;
+    this.burst({ filter: 'highpass', f0: 2600, dur: 0.03, gain: 0.3, wet: 0.1 });
+    this.tone({ type: 'square', f0: 520, f1: 260, dur: 0.07, gain: 0.12, wet: 0.2 });
+    this.tone({ type: 'sine', f0: 150, f1: 70, dur: 0.1, gain: 0.2, wet: 0.25 });
+  }
+
+  /** New magazine seating. */
+  magIn(): void {
+    if (!this.gate('magin', 60)) return;
+    this.tone({ type: 'sine', f0: 190, f1: 80, dur: 0.12, gain: 0.4, wet: 0.2 });
+    this.tone({ type: 'square', f0: 380, f1: 620, dur: 0.05, gain: 0.1, wet: 0.2 });
+    this.burst({ filter: 'bandpass', f0: 1800, q: 2, dur: 0.05, gain: 0.25, wet: 0.1 });
+  }
+
+  /** Bolt release / charging handle. The empty reload gets the full double-clack. */
+  rack(full: boolean): void {
+    if (!this.gate('rack', 80)) return;
+    this.burst({ filter: 'highpass', f0: 3200, dur: 0.03, gain: 0.35, wet: 0.1 });
+    this.tone({ type: 'sawtooth', f0: 300, f1: 130, dur: 0.06, gain: 0.2, wet: 0.2 });
+    if (!full) return;
+    window.setTimeout(() => {
+      this.burst({ filter: 'highpass', f0: 2400, dur: 0.035, gain: 0.4, wet: 0.1 });
+      this.tone({ type: 'square', f0: 210, f1: 100, dur: 0.07, gain: 0.22, wet: 0.2 });
+    }, 70);
+  }
+
   windup(): void {
     if (!this.gate('windup', 40)) return;
     this.tone({ type: 'sawtooth', f0: 90, f1: 210, dur: 0.1, gain: 0.16, wet: 0.2 });

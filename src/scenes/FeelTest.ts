@@ -2,11 +2,12 @@
 // swarms and rogue robots. Everything here exists to answer one question:
 // does being a clone super soldier feel heavy, fast and good for ten minutes?
 import Phaser from 'phaser';
-import { PALETTE, RARITY_COLORS } from '../data/palette';
+import { FONT, PALETTE, RARITY_COLORS, hex } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { Sfx } from '../fx/audio';
 import { Particles } from '../fx/particles';
 import { pushFeed, resetVitals, runState, setBanner } from '../game/runState';
+import { rollDamage } from '../sim/damage';
 import { rollItem, type Item } from '../sim/loot';
 import {
   DEG,
@@ -52,7 +53,7 @@ const PIPES = [
 
 type KeyName =
   | 'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'
-  | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'ONE' | 'TWO';
+  | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'T' | 'H' | 'ONE' | 'TWO';
 type KeyMap = Record<KeyName, Phaser.Input.Keyboard.Key>;
 
 type MobKind = 'scav' | 'robot';
@@ -139,6 +140,20 @@ interface SwordState {
   hit: Set<Mob>;
 }
 
+type NumClass = 'gun' | 'blade' | 'hurt' | 'shield' | 'refund';
+
+interface DmgNum {
+  txt: Phaser.GameObjects.Text;
+  cls: NumClass;
+  active: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  life: number;
+}
+
 export class FeelTest extends Phaser.Scene {
   private sfx = new Sfx();
   private rng = new Rng((Date.now() ^ 0x9e3779b9) >>> 0);
@@ -180,6 +195,16 @@ export class FeelTest extends Phaser.Scene {
   private rmbWas = false;
   private sw: SwordState = { state: 'idle', t: 0, angle: 0, dir: 1, hit: new Set() };
   private comboTimer = 0;
+  private swordCd = 0;
+  private prevDashReady = 1;
+  private prevBladeReady = 1;
+  private dmgNums: DmgNum[] = [];
+
+  // reload
+  private reloadT = -1; // seconds into the current reload, -1 when idle
+  private reloadTime: number = T.gun.reloadTime;
+  private reloadMagIn = false;
+  private reloadWasEmpty = false;
 
   // world
   private wave = 0;
@@ -206,7 +231,7 @@ export class FeelTest extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.setDefaultCursor('none');
     this.keys = this.input.keyboard!.addKeys(
-      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,ONE,TWO',
+      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO',
     ) as unknown as KeyMap;
 
     const unlock = (): void => this.sfx.unlock();
@@ -246,6 +271,7 @@ export class FeelTest extends Phaser.Scene {
       });
     }
 
+    this.createNumbers();
     this.resetWorld(true);
   }
 
@@ -402,6 +428,7 @@ export class FeelTest extends Phaser.Scene {
       this.deadTimer -= dt;
       this.particles.update(dt);
       this.updateGlows(dt);
+      this.updateNumbers(dt);
       this.applyCamera(dt, false);
       if (this.deadTimer <= 0) this.resetWorld(false);
       return;
@@ -417,6 +444,7 @@ export class FeelTest extends Phaser.Scene {
     this.updateDrops(dt);
     this.particles.update(dt);
     this.updateGlows(dt);
+    this.updateNumbers(dt);
     this.applyCamera(dt, false);
     this.syncState();
   }
@@ -427,6 +455,11 @@ export class FeelTest extends Phaser.Scene {
     s.hitMarker = Math.max(0, s.hitMarker - dt * 7);
     s.killMarker = Math.max(0, s.killMarker - dt * 3.5);
     s.refundFlash = Math.max(0, s.refundFlash - dt * 2.2);
+    s.dryFlash = Math.max(0, s.dryFlash - dt * 4);
+    s.dashPing = Math.max(0, s.dashPing - dt * 3);
+    s.bladePing = Math.max(0, s.bladePing - dt * 3);
+    s.dashDeny = Math.max(0, s.dashDeny - dt * 4);
+    s.bladeDeny = Math.max(0, s.bladeDeny - dt * 4);
     s.bannerTime = Math.max(0, s.bannerTime - dt);
     for (const f of s.feed) f.age += dt;
     s.feed = s.feed.filter((f) => f.age < T.loot.feedSeconds);
@@ -439,6 +472,11 @@ export class FeelTest extends Phaser.Scene {
   private syncState(): void {
     const s = runState;
     s.dashReady = this.dashCd <= 0 ? 1 : 1 - this.dashCd / T.player.dashCooldown;
+    s.bladeReady = this.swordCd <= 0 ? 1 : 1 - this.swordCd / T.sword.cooldown;
+    if (this.prevDashReady < 1 && s.dashReady >= 1) s.dashPing = 1;
+    if (this.prevBladeReady < 1 && s.bladeReady >= 1) s.bladePing = 1;
+    this.prevDashReady = s.dashReady;
+    this.prevBladeReady = s.bladeReady;
     s.wave = this.wave;
     s.mobsAlive = this.mobs.filter((m) => !m.dead).length + this.spawnQueue.length;
     s.intermission = this.waveLive ? 0 : Math.max(0, this.waveTimer);
@@ -459,7 +497,8 @@ export class FeelTest extends Phaser.Scene {
     if (K.JustDown(this.keys.ONE)) this.queueSwarm(T.waves.swarmSize);
     if (K.JustDown(this.keys.TWO)) this.queueSpawn('robot', 0);
     if (K.JustDown(this.keys.K)) this.killAll();
-    if (K.JustDown(this.keys.R)) this.resetWorld(false);
+    if (K.JustDown(this.keys.T)) this.resetWorld(false);
+    if (K.JustDown(this.keys.H)) runState.showHelp = !runState.showHelp;
     if (K.JustDown(this.keys.M)) this.sfx.setMuted(!this.sfx.muted);
     if (K.JustDown(this.keys.X)) this.extract();
   }
@@ -482,7 +521,9 @@ export class FeelTest extends Phaser.Scene {
     }
 
     this.dashCd = Math.max(0, this.dashCd - dt);
+    const dashPressed = K.JustDown(k.SHIFT) || K.JustDown(k.SPACE);
     if (this.dashT > 0) {
+      if (dashPressed) runState.dashDeny = 1; // already dashing, and the cooldown is running
       this.dashT -= dt;
       this.pvx = this.dashX * P.dashSpeed;
       this.pvy = this.dashY * P.dashSpeed;
@@ -495,15 +536,21 @@ export class FeelTest extends Phaser.Scene {
         });
       }
     } else {
-      if ((K.JustDown(k.SHIFT) || K.JustDown(k.SPACE)) && this.dashCd <= 0 && this.sw.state !== 'swing') {
-        this.dashT = P.dashTime;
-        this.dashCd = P.dashCooldown;
-        this.dashX = moving ? ix : Math.cos(this.aim);
-        this.dashY = moving ? iy : Math.sin(this.aim);
-        this.sfx.dash();
-        this.trauma = Math.min(1, this.trauma + 0.1);
-        this.kickX += this.dashX * 6;
-        this.kickY += this.dashY * 6;
+      if (dashPressed) {
+        if (this.dashCd <= 0 && this.sw.state !== 'swing') {
+          this.dashT = P.dashTime;
+          this.dashCd = P.dashCooldown;
+          this.dashX = moving ? ix : Math.cos(this.aim);
+          this.dashY = moving ? iy : Math.sin(this.aim);
+          this.sfx.dash();
+          this.trauma = Math.min(1, this.trauma + 0.1);
+          this.kickX += this.dashX * 6;
+          this.kickY += this.dashY * 6;
+        } else {
+          // Pressed too early: flash the cooldown box so the miss is readable.
+          runState.dashDeny = 1;
+          this.sfx.empty();
+        }
       }
       const factor = this.sw.state === 'windup' || this.sw.state === 'swing' ? P.swingMoveFactor : 1;
       const tvx = ix * P.maxSpeed * factor;
@@ -585,6 +632,8 @@ export class FeelTest extends Phaser.Scene {
     this.pvx += Math.cos(fromAngle) * 90;
     this.pvy += Math.sin(fromAngle) * 90;
     this.sfx.hurt();
+    if (soak > 0) this.spawnNumber(this.px - 8, this.py - 26, `-${Math.round(soak)}`, 'shield');
+    if (dmg - soak > 0) this.spawnNumber(this.px + 8, this.py - 40, `-${Math.round(dmg - soak)}`, 'hurt');
     if (hadShield && s.shield <= 0) {
       this.particles.burst(this.px, this.py, 0, Math.PI * 2, 18, 120, 420, {
         life: 0.35, w: 10, h: 2, color: PALETTE.shield, add: true, drag: 3, align: true,
@@ -626,26 +675,39 @@ export class FeelTest extends Phaser.Scene {
   private updateGun(dt: number): void {
     const G = T.gun;
     const ptr = this.input.activePointer;
+    const s = runState;
     this.fireCd -= dt;
     this.bloom = Math.max(0, this.bloom - 14 * dt);
-    runState.ammo = Math.min(runState.maxAmmo, runState.ammo + G.ammoRegenPerSec * dt);
+    s.reserve = Math.min(s.maxReserve, s.reserve + G.reserveRegenPerSec * dt);
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.R)) this.startReload();
+    if (this.reloadT >= 0) this.tickReload(dt);
 
     const firing = ptr.isDown && ptr.leftButtonDown();
-    if (!firing || this.fireCd > 0 || this.sw.state !== 'idle') return;
-    if (runState.ammo < 1) {
-      this.fireCd = 0.2;
-      this.sfx.empty();
+    if (!firing || this.fireCd > 0 || this.sw.state !== 'idle' || this.reloadT >= 0) return;
+    if (s.mag < 1) {
+      // Trigger on an empty mag: reload if there is anything to load, else dry click.
+      if (s.reserve >= 1) {
+        this.startReload();
+      } else {
+        this.fireCd = 0.2;
+        s.dryFlash = 1;
+        this.sfx.empty();
+      }
       return;
     }
 
-    runState.ammo -= 1;
+    s.mag -= 1;
+    s.shotSeq += 1;
     this.fireCd = G.fireDelay;
     const cone = (G.spread + this.bloom) * DEG;
     const a = this.aim + (Math.random() - 0.5) * 2 * cone;
     const mx = this.px + Math.cos(this.aim) * G.muzzleOffset;
     const my = this.py + Math.sin(this.aim) * G.muzzleOffset;
-    this.fireBullet(mx, my, a, G.bulletSpeed, G.damage, true, G.bulletLife, 0xe9fff6, 28, 2.6);
+    const dmg = rollDamage(this.rng, G.damage, G.damageVariance);
+    this.fireBullet(mx, my, a, G.bulletSpeed, dmg, true, G.bulletLife, 0xe9fff6, 28, 2.6);
     this.bloom = Math.min(5.5, this.bloom + 0.9);
+    if (s.mag < 1 && s.reserve >= 1) this.startReload();
 
     // Juice: flash, light, casing, recoil, kick, noise.
     this.particles.emit({
@@ -666,6 +728,54 @@ export class FeelTest extends Phaser.Scene {
     this.kickY -= Math.sin(this.aim) * G.cameraKick;
     this.trauma = Math.min(1, this.trauma + G.shotTrauma);
     this.sfx.shoot();
+  }
+
+  private startReload(): void {
+    const G = T.gun;
+    const s = runState;
+    if (this.reloadT >= 0 || s.mag >= s.magSize || s.reserve < 1) return;
+    this.reloadWasEmpty = s.mag < 1;
+    this.reloadTime = this.reloadWasEmpty ? G.reloadTimeEmpty : G.reloadTime;
+    this.reloadT = 0;
+    this.reloadMagIn = false;
+    s.reload = 0;
+    s.reloadEmpty = this.reloadWasEmpty;
+    this.sfx.magOut();
+    // The spent magazine drops to the floor beside the clone.
+    const side = this.aim + Math.PI / 2;
+    this.particles.emit({
+      x: this.px + Math.cos(this.aim) * 10, y: this.py + Math.sin(this.aim) * 10,
+      vx: Math.cos(side) * 70 + this.pvx * 0.3, vy: Math.sin(side) * 70 + this.pvy * 0.3,
+      life: 0.9, w: 11, h: 5, rot: this.aim, color: 0x3a4a47, drag: 3.2, spin: 4,
+      decal: { color: 0x1a2422, alpha: 0.7, scale: 0.28 },
+    });
+    this.kickX -= Math.cos(this.aim) * 2;
+    this.kickY -= Math.sin(this.aim) * 2;
+  }
+
+  private tickReload(dt: number): void {
+    const s = runState;
+    this.reloadT += dt;
+    const p = clamp(this.reloadT / this.reloadTime, 0, 1);
+    s.reload = p;
+    if (!this.reloadMagIn && p >= T.gun.magInAt) {
+      this.reloadMagIn = true;
+      this.sfx.magIn();
+      this.trauma = Math.min(1, this.trauma + 0.03);
+    }
+    if (p >= 1) this.finishReload();
+  }
+
+  private finishReload(): void {
+    const s = runState;
+    const take = Math.min(s.magSize - s.mag, Math.floor(s.reserve));
+    s.mag += take;
+    s.reserve -= take;
+    this.reloadT = -1;
+    s.reload = -1;
+    this.sfx.rack(this.reloadWasEmpty);
+    this.glowAt(this.px, this.py, PALETTE.ammo, 1.6, 0.8, 0.12, 0.22);
+    this.trauma = Math.min(1, this.trauma + 0.04);
   }
 
   private fireBullet(
@@ -749,14 +859,27 @@ export class FeelTest extends Phaser.Scene {
     const rmb = ptr.isDown && ptr.rightButtonDown();
     const pressed = (rmb && !this.rmbWas) || Phaser.Input.Keyboard.JustDown(this.keys.F);
     this.rmbWas = rmb;
+    this.swordCd = Math.max(0, this.swordCd - dt);
+
+    if (pressed && sw.state !== 'idle') {
+      // Mid-swing the cooldown is already running, so an extra press is an early press.
+      runState.bladeDeny = 1;
+      this.sfx.empty();
+    }
 
     if (sw.state === 'idle') {
       this.bladeGfx.clear();
       this.bladeGlow.setVisible(false);
       if (pressed) {
+        if (this.swordCd > 0) {
+          runState.bladeDeny = 1;
+          this.sfx.empty();
+          return;
+        }
         sw.state = 'windup';
         sw.t = 0;
         sw.dir = sw.dir === 1 ? -1 : 1;
+        this.swordCd = S.cooldown;
         this.sfx.windup();
       }
       return;
@@ -845,7 +968,7 @@ export class FeelTest extends Phaser.Scene {
       const tol = S.hitTolerance * DEG + Math.asin(Math.min(1, m.radius / Math.max(d, 1)));
       if (Math.abs(angleDiff(ang, theta)) > tol) continue;
       this.sw.hit.add(m);
-      this.damageMob(m, S.damage, ang, 'sword', m.x - Math.cos(ang) * m.radius * 0.5, m.y - Math.sin(ang) * m.radius * 0.5, theta);
+      this.damageMob(m, rollDamage(this.rng, S.damage, S.damageVariance), ang, 'sword', m.x - Math.cos(ang) * m.radius * 0.5, m.y - Math.sin(ang) * m.radius * 0.5, theta);
     }
     // The blade also cuts incoming fire out of the air.
     for (const b of this.bullets) {
@@ -878,6 +1001,7 @@ export class FeelTest extends Phaser.Scene {
     m.hp -= dmg;
     m.flash = 0.07;
     runState.hitMarker = 1;
+    this.spawnNumber(m.x, m.y - m.radius - 6, String(dmg), heavy ? 'blade' : 'gun');
 
     const kb = heavy ? T.sword.knockback * (isRobot ? 0.3 : 1) : isRobot ? T.robot.gunKnockback : T.scav.gunKnockback;
     m.vx += Math.cos(ang) * kb;
@@ -1005,7 +1129,8 @@ export class FeelTest extends Phaser.Scene {
 
   private refundOnKill(): void {
     const S = T.sword;
-    runState.ammo = Math.min(runState.maxAmmo, runState.ammo + S.ammoRefund);
+    runState.reserve = Math.min(runState.maxReserve, runState.reserve + S.reserveRefund);
+    this.spawnNumber(this.px, this.py - 30, `+${S.reserveRefund}`, 'refund');
     runState.shield = Math.min(runState.maxShield, runState.shield + S.shieldRefund);
     runState.refundFlash = 1;
     this.sfx.kill(1 + Math.min(runState.combo, 9) * 0.07);
@@ -1023,6 +1148,85 @@ export class FeelTest extends Phaser.Scene {
 
   private addHitStop(seconds: number): void {
     this.hitStop = Math.max(this.hitStop, seconds);
+  }
+
+  // ------------------------------------------------------------------
+  // Floating damage numbers
+  // ------------------------------------------------------------------
+
+  private createNumbers(): void {
+    const N = T.numbers;
+    const spec: Record<NumClass, { size: number; color: number }> = {
+      gun: { size: N.gunSize, color: PALETTE.spark },
+      blade: { size: N.bladeSize, color: PALETTE.white },
+      hurt: { size: N.hurtSize, color: PALETTE.hostile },
+      shield: { size: N.shieldSize, color: PALETTE.shield },
+      refund: { size: N.refundSize, color: PALETTE.ammo },
+    };
+    for (const cls of Object.keys(spec) as NumClass[]) {
+      const { size, color } = spec[cls];
+      for (let i = 0; i < N.pool[cls]; i++) {
+        const txt = this.add
+          .text(0, 0, '', {
+            fontFamily: FONT,
+            fontStyle: 'bold',
+            fontSize: `${size}px`,
+            color: hex(color),
+            stroke: '#000000',
+            strokeThickness: Math.max(3, Math.round(size / 6)),
+          })
+          .setOrigin(0.5)
+          .setDepth(30)
+          .setVisible(false);
+        this.dmgNums.push({ txt, cls, active: false, x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 1 });
+      }
+    }
+  }
+
+  private spawnNumber(x: number, y: number, text: string, cls: NumClass): void {
+    const N = T.numbers;
+    let slot: DmgNum | undefined;
+    let oldest: DmgNum | undefined;
+    for (const n of this.dmgNums) {
+      if (n.cls !== cls) continue;
+      if (!n.active) {
+        slot = n;
+        break;
+      }
+      if (!oldest || n.age > oldest.age) oldest = n;
+    }
+    const n = slot ?? oldest;
+    if (!n) return;
+    n.active = true;
+    n.age = 0;
+    n.life = cls === 'blade' ? N.bladeLife : N.life;
+    n.x = x + (Math.random() * 2 - 1) * N.jitter;
+    n.y = y;
+    n.vx = (Math.random() * 2 - 1) * N.sideways;
+    n.vy = -N.rise * (0.8 + Math.random() * 0.4);
+    n.txt.setText(text).setVisible(true).setPosition(n.x, n.y).setAlpha(1).setScale(1 + N.popScale);
+  }
+
+  private updateNumbers(dt: number): void {
+    const N = T.numbers;
+    const k = Math.exp(-N.drag * dt);
+    for (const n of this.dmgNums) {
+      if (!n.active) continue;
+      n.age += dt;
+      if (n.age >= n.life) {
+        n.active = false;
+        n.txt.setVisible(false);
+        continue;
+      }
+      n.vx *= k;
+      n.vy *= k;
+      n.x += n.vx * dt;
+      n.y += n.vy * dt;
+      const fadeStart = n.life * 0.55;
+      const alpha = n.age < fadeStart ? 1 : 1 - (n.age - fadeStart) / (n.life - fadeStart);
+      const pop = Math.max(0, 1 - n.age / N.popTime);
+      n.txt.setPosition(n.x, n.y).setAlpha(alpha).setScale(1 + N.popScale * pop);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -1272,6 +1476,14 @@ export class FeelTest extends Phaser.Scene {
     this.sw.t = 0;
     this.sw.hit.clear();
     this.fireCd = 0;
+    this.reloadT = -1;
+    this.swordCd = 0;
+    this.prevDashReady = 1;
+    this.prevBladeReady = 1;
+    for (const n of this.dmgNums) {
+      n.active = false;
+      n.txt.setVisible(false);
+    }
     this.bloom = 0;
     this.shieldCd = 0;
     this.hitStop = 0;

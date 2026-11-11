@@ -26,13 +26,15 @@ To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z
 |---|---|
 | WASD | Move |
 | Mouse | Aim |
-| Left mouse | Carbine (uses ammo) |
-| Right mouse or F | Arc blade: wind-up, lunging cleave, bisects scavengers |
-| Shift or Space | Dash (brief invulnerability) |
+| Left mouse | Carbine: 30-round magazine plus reserve. Empty trigger pull auto-reloads |
+| R | Reload (tactical reload is quicker than reloading from empty) |
+| Right mouse or F | Arc blade: wind-up, lunging cleave, bisects scavengers. 0.8s cooldown; kills refund reserve ammo and shield |
+| Shift or Space | Dash (brief invulnerability, 0.9s cooldown) |
 | X | Extract: bank carried loot into the stash |
 | 1 / 2 | Spawn a scavenger swarm / a robot |
 | K | Clear all hostiles |
-| R | Reset the room |
+| T | Reset the room |
+| H | Hide or show the help text |
 | M | Mute |
 
 Blade kills refund ammo and shield, so wading in is rewarded over kiting. Dying loses everything you carry; the stash is safe.

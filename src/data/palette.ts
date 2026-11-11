@@ -31,6 +31,8 @@ export const RARITY_COLORS: readonly number[] = [
   0xbffcff, // aercho
 ];
 
+export const FONT = '"Space Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
 export function hex(n: number): string {
   return '#' + n.toString(16).padStart(6, '0');
 }

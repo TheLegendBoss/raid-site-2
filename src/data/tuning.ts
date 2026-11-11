@@ -37,8 +37,14 @@ export const TUNING = {
     bulletSpeed: 1050,
     bulletLife: 0.9,
     damage: 11,
-    maxAmmo: 90,
-    ammoRegenPerSec: 2.5,
+    damageVariance: 0.15, // +/- fraction, rolled per shot
+    magSize: 30,
+    startReserve: 120,
+    maxReserve: 180,
+    reserveRegenPerSec: 1.5, // generous for the feel test so you are never stranded
+    reloadTime: 1.15, // tactical reload: rounds left in the mag
+    reloadTimeEmpty: 1.6, // empty reload: bolt has to be racked
+    magInAt: 0.7, // fraction of the reload at which the new mag seats
     recoilImpulse: 38,
     cameraKick: 3.2, // px opposite the aim per shot
     shotTrauma: 0.045,
@@ -54,9 +60,11 @@ export const TUNING = {
     arcHalfAngle: 82, // degrees either side of aim
     hitTolerance: 30, // degrees: forgiveness around the blade angle each frame
     damage: 70,
+    damageVariance: 0.12,
+    cooldown: 0.8, // from the start of the wind-up to the next one
     lungeSpeed: 560,
     lungeDecay: 9,
-    ammoRefund: 9,
+    reserveRefund: 9, // reserve rounds returned per blade kill
     shieldRefund: 12,
     staggerRobot: 0.65,
     knockback: 260,
@@ -119,6 +127,24 @@ export const TUNING = {
     robotCap: 4,
     spawnStagger: 0.11,
     swarmSize: 16,
+  },
+
+  // Floating damage numbers.
+  numbers: {
+    life: 0.85,
+    bladeLife: 1.05,
+    rise: 95, // initial upward speed, px/s
+    drag: 3.2,
+    sideways: 30,
+    jitter: 16, // random horizontal spawn offset, px
+    popScale: 0.7,
+    popTime: 0.12,
+    gunSize: 15,
+    bladeSize: 28,
+    hurtSize: 21,
+    shieldSize: 21,
+    refundSize: 16,
+    pool: { gun: 36, blade: 16, hurt: 8, shield: 8, refund: 8 },
   },
 
   loot: {

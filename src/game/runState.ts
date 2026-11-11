@@ -13,9 +13,25 @@ export interface RunState {
   maxHp: number;
   shield: number;
   maxShield: number;
-  ammo: number;
-  maxAmmo: number;
-  dashReady: number; // 0..1
+
+  // Carbine
+  mag: number;
+  magSize: number;
+  reserve: number;
+  maxReserve: number;
+  reload: number; // -1 when idle, otherwise 0..1 progress
+  reloadEmpty: boolean; // the current reload started from an empty mag
+  shotSeq: number; // increments once per round fired; the HUD animates on change
+  dryFlash: number; // 0..1, decays: trigger pulled with nothing to fire
+
+  // Cooldowns: 0..1 where 1 is ready. Pings flash when one comes back; denies flash on an early press.
+  dashReady: number;
+  dashPing: number;
+  dashDeny: number;
+  bladeReady: number;
+  bladePing: number;
+  bladeDeny: number;
+
   wave: number;
   mobsAlive: number;
   intermission: number; // seconds left, 0 if a wave is live
@@ -31,6 +47,7 @@ export interface RunState {
   banner: string;
   bannerTime: number;
   muted: boolean;
+  showHelp: boolean;
 }
 
 export const runState: RunState = {
@@ -38,9 +55,23 @@ export const runState: RunState = {
   maxHp: TUNING.player.maxHp,
   shield: TUNING.player.maxShield,
   maxShield: TUNING.player.maxShield,
-  ammo: TUNING.gun.maxAmmo,
-  maxAmmo: TUNING.gun.maxAmmo,
+
+  mag: TUNING.gun.magSize,
+  magSize: TUNING.gun.magSize,
+  reserve: TUNING.gun.startReserve,
+  maxReserve: TUNING.gun.maxReserve,
+  reload: -1,
+  reloadEmpty: false,
+  shotSeq: 0,
+  dryFlash: 0,
+
   dashReady: 1,
+  dashPing: 0,
+  dashDeny: 0,
+  bladeReady: 1,
+  bladePing: 0,
+  bladeDeny: 0,
+
   wave: 0,
   mobsAlive: 0,
   intermission: 0,
@@ -56,13 +87,17 @@ export const runState: RunState = {
   banner: '',
   bannerTime: 0,
   muted: false,
+  showHelp: true,
 };
 
 export function resetVitals(): void {
   runState.hp = runState.maxHp;
   runState.shield = runState.maxShield;
-  runState.ammo = runState.maxAmmo;
+  runState.mag = runState.magSize;
+  runState.reserve = TUNING.gun.startReserve;
+  runState.reload = -1;
   runState.dashReady = 1;
+  runState.bladeReady = 1;
   runState.damageFlash = 0;
   runState.combo = 0;
 }

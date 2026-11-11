@@ -19,6 +19,13 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 - Feel is the product. Hit-stop, shake, light flashes, shatter debris and layered sound live in `src/fx/` and `FeelTest`; keep their numbers in `tuning.ts`.
 - Before finishing a change: `npm run typecheck`, `npm run build`, and actually run it in a browser. Type checks do not catch feel, layout or input bugs.
 
+## Combat model
+
+- Carbine uses a magazine plus reserve (`TUNING.gun`). Reload state, dash/blade cooldown fractions and the shot counter reach the HUD through `runState` (`reload`, `shotSeq`, `dashReady`, `bladeReady`, ping/deny flashes). The HUD animates the bolt, magazine and ejected casings from those fields.
+- Damage is rolled in `src/sim/damage.ts` (`rollDamage`) and shown as pooled floating numbers (`TUNING.numbers`).
+- Keys: R reload, T reset room, H toggle help.
+- The Neo Zero tileset is not in the repo: its licence forbids redistribution and use in anything where the assets can be extracted (a public repo or single-file release would qualify). Do not commit it without the owner's decision.
+
 ## Terminology
 
 - **Carried**: loot held in the run; lost on death.
