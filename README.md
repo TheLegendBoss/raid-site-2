@@ -14,6 +14,12 @@ npm run build      # typecheck + production build
 
 Click the page once so the browser allows audio.
 
+## Download
+
+Grab `raid-site-2-vX.Y.Z.html` from the [Releases page](https://github.com/TheLegendBoss/raid-site-2/releases) and double-click it. It is one self-contained file with no server or install needed.
+
+To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. The `Release` workflow builds `npm run release` and attaches the file. To build it locally, run `npm run release` and open `dist-release/index.html`.
+
 ## Controls
 
 | Input | Action |
