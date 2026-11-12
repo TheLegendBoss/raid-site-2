@@ -14,9 +14,9 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 - `src/sim/` is pure TypeScript with no `phaser` import. Put rules and rolls there.
 - Tunable numbers live in `src/data/`, never inline in logic.
 - Vector art only, in two forms: Graphics/Shapes/text and textures baked in `src/fx/textures.ts` for effects and HUD, and character art authored as vex source (`art/*.vx.js`, a vector DSL) exported to PNG parts in `src/assets/art/` (exported at 4x, drawn at `TUNING.art.scale`). No hand-painted or third-party raster assets. Palette in `src/data/palette.ts`. Baked character lighting must be symmetric, because the sprites rotate with the aim.
-- Draw static art once. Redraw a Graphics only when state changes (see the hit-flash toggle in `FeelTest`). RenderTexture draw calls are buffered: call `render()` after stamping.
+- Draw static art once. Redraw a Graphics only when state changes (see the hit-flash toggle in `src/fx/mobArt.ts`). RenderTexture draw calls are buffered: call `render()` after stamping.
 - HUD is its own scene (`Hud`) so game camera shake and zoom never move it. Game to HUD communication goes through `src/game/runState.ts`.
-- Feel is the product. Hit-stop, shake, light flashes, shatter debris and layered sound live in `src/fx/` and `FeelTest`; keep their numbers in `tuning.ts`.
+- Feel is the product. Hit-stop, shake, light flashes, shatter debris and layered sound live in `src/fx/` and `src/game/systems/`; keep their numbers in `tuning.ts`.
 - Before finishing a change: `npm run typecheck`, `npm run build`, and actually run it in a browser. Type checks do not catch feel, layout or input bugs.
 
 ## Combat model

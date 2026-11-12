@@ -177,7 +177,7 @@ Every hit has hit-stop, shake, light flash, damage number and layered sound. Hum
 
 ## 10. Technical plan and order of work
 
-1. **Split `FeelTest`** (about 1,700 lines) into player, enemies, projectiles, loot, waves and the scene shell. Behaviour must not change. Check against today's build.
+1. **Split `FeelTest`** (done): the scene is now a 240-line loop; state lives in `src/game/world.ts`, rules in `src/game/systems/` (player, gun, blade, combat, mobs, loot, camera), effects in `src/fx/`, arena data in `src/data/arena.ts`.
 2. **Stats and items:** `items.ts`, `stats.ts`, equip panel, stash saves.
 3. **Base:** stash screen and quartermaster.
 4. **Silo generator:** templates, seeded graph, doors, key and gate, extract points, a debug view of the graph.

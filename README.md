@@ -58,7 +58,8 @@ src/data/      palette and tuning: every tunable number lives here
 src/sim/       pure TypeScript (maths, loot rolls), no engine imports
 src/fx/        procedural WebAudio, pooled particles, baked textures
 src/game/      shared run state the HUD reads
-src/scenes/    Boot, FeelTest (the room), Hud (its own scene)
+src/scenes/    Boot, FeelTest (loop and wiring), Hud (its own scene)
+src/game/      world state, shared context, systems/ (player, gun, blade, combat, mobs, loot, camera)
 ```
 
 Tuning for gun, blade, enemies, camera shake, hit-stop and loot is in `src/data/tuning.ts`. Rarity weights and item names are in `src/data/loot.ts`.
