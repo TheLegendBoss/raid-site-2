@@ -224,7 +224,7 @@ export class FeelTest extends Phaser.Scene {
     s.wave = this.w.wave;
     const room = this.w.room;
     s.waveTotal = room ? room.waves.length : 0;
-    s.roomLabel = room ? `FLOOR ${room.floor}   ROOM ${room.roomOnFloor}/${room.roomsOnFloor}   #${room.index + 1}/${currentRun()!.plan.rooms.length}` : '';
+    s.roomLabel = room ? `FLOOR ${room.floor}   ROOM ${room.roomOnFloor}/${room.roomsOnFloor}   #${room.index + 1}/${currentRun()?.plan.rooms.length ?? room.index + 1}` : '';
     const boss = this.w.mobs.find((m) => m.kind === 'warden' && !m.dead);
     s.bossName = boss ? MOBS.warden.name.toUpperCase() : '';
     s.bossHp = boss ? Math.max(0, boss.hp) : 0;
