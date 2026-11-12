@@ -21,6 +21,8 @@ import {
 import type { MissionResult } from '../game/mission';
 import { runState } from '../game/runState';
 import { statLines, type StatLine } from '../sim/describe';
+import { GUN_KITS, KIT_SLOTS, PART_NAMES } from '../data/gunKits';
+import { pixGunKey } from '../fx/pixGun';
 import { baseOf, buyPrice, dismantleIntel, rarityLabel, sellValue, type Item } from '../sim/loot';
 import { showCursor } from '../ui/cursor';
 
@@ -57,6 +59,7 @@ const HEADER_H = 84;
 const FOOTER_H = 44;
 const LEFT_W = 330;
 const RIGHT_W = 380;
+const BTN_GAP = 6; // gap between the detail panel's action buttons
 const ROW_H = 40;
 const PAGES: { id: Page | 'research' | 'perks'; label: string }[] = [
   { id: 'outfit', label: 'OUTFIT' },
@@ -714,20 +717,28 @@ export class Base extends Phaser.Scene {
     const col = RARITY_COLORS[rarity];
     this.text(x + 16, y + 14, base.name, 22, col);
     this.text(x + 16, y + 44, `${RARITY_LABELS[rarity]}  ${SLOT_LABELS[base.slot]}  (${base.family})`, 12, PALETTE.textDim);
-    const d = this.text(x + 16, y + 68, base.desc, 13, PALETTE.text);
+    let dy = y + 64;
+    const kit = base.slot === 'primary' && base.weapon ? GUN_KITS[base.weapon.shape] : undefined;
+    if (kit && base.weapon) dy = this.drawGunSchematic(x + 16, dy, w - 32, base.weapon.shape, kit, col) + 8;
+    const d = this.text(x + 16, dy, base.desc, 13, PALETTE.text);
     d.setWordWrapWidth(w - 32);
+
+    // Buttons sit at the bottom; the stat lines get whatever room is left above them.
+    this.btns = this.buttons();
+    const bh = 32;
+    const btnTop = y + h - 16 - this.btns.length * (bh + BTN_GAP) + BTN_GAP;
 
     // Stat lines compared with what is equipped in that slot.
     const eq = profile.equipped[base.slot];
     const mine = eq ? new Map(statLines(baseOf(eq), eq.rarity).map((l) => [l.key, l])) : new Map<string, StatLine>();
-    let ly = y + 68 + d.height + 18;
+    let ly = dy + d.height + 18;
     this.text(x + 16, ly, 'STATS  vs equipped', 11, PALETTE.textDim);
-    ly += 20;
+    ly += 17;
     const lines = statLines(base, rarity);
     // Weapons carry a lot of stats: squeeze the row spacing to fit above the buttons.
-    const bottom = y + h - 16 - 3 * 42 - 22;
-    const lh = Math.max(15, Math.min(22, (bottom - ly) / lines.length));
-    const fs = lh < 18 ? 12 : 13;
+    const bottom = btnTop - 24;
+    const lh = Math.max(14, Math.min(22, (bottom - ly) / lines.length));
+    const fs = lh < 15 ? 11 : lh < 18 ? 12 : 13;
     for (const l of lines) {
       this.text(x + 16, ly, l.label, fs, PALETTE.text);
       this.text(x + w - 130, ly, l.text, fs, PALETTE.white, [1, 0]);
@@ -744,9 +755,7 @@ export class Base extends Phaser.Scene {
     }
 
     // Action buttons along the bottom.
-    this.btns = this.buttons();
-    const bh = 34;
-    let by = y + h - 16 - this.btns.length * (bh + 8) + 8;
+    let by = btnTop;
     for (const b of this.btns) {
       const on = b.enabled;
       this.gfx.fillStyle(on ? 0x0b1f22 : 0x080e10, 1);
@@ -756,11 +765,39 @@ export class Base extends Phaser.Scene {
       this.text(x + 28, by + 9, `[${b.key}]`, 13, on ? PALETTE.ammo : PALETTE.textDim);
       this.text(x + 96, by + 9, b.label, 13, on ? PALETTE.white : PALETTE.textDim);
       this.hit(`btn:${b.key}`, x + 16, by, w - 32, bh, () => (b.enabled ? b.run() : this.deny(b)), b.enabled);
-      by += bh + 8;
+      by += bh + BTN_GAP;
     }
     if (row.shop) {
-      this.text(x + 16, y + h - 16 - this.btns.length * (bh + 8) - 14, 'Epic and above is never for sale.', 11, PALETTE.textDim);
+      this.text(x + 16, btnTop - 16, 'Epic and above is never for sale.', 11, PALETTE.textDim);
     }
+  }
+
+  /**
+   * The pixel gun beside its mod slots: receiver, barrel, optic and stock, each with the part fitted.
+   * Returns the y below the block.
+   */
+  private drawGunSchematic(x: number, y: number, w: number, shape: string, kit: (typeof GUN_KITS)[string], col: number): number {
+    const sc = 2;
+    const gw = 64 * sc;
+    const bh = 4 * 16 + 8;
+    this.gfx.fillStyle(0x070f12, 1);
+    this.gfx.fillRect(x, y, w, bh);
+    this.gfx.lineStyle(1, col, 0.7);
+    this.gfx.strokeRect(x, y, w, bh);
+    const img = this.add.image(x + 8, y + (bh - 32 * sc) / 2, pixGunKey(shape)).setOrigin(0, 0).setScale(sc).setDepth(5);
+    this.dyn.push(img);
+    const cx = x + gw + 24;
+    KIT_SLOTS.forEach((slot, i) => {
+      const part = kit[slot.key];
+      const ry = y + 6 + i * 16;
+      this.text(cx, ry + 2, slot.label, 9, PALETTE.textDim);
+      this.text(x + w - 8, ry + 1, part ? (PART_NAMES[part] ?? part) : 'none', 11, part ? PALETTE.text : PALETTE.textDim, [1, 0]);
+      if (i < KIT_SLOTS.length - 1) {
+        this.gfx.lineStyle(1, PALETTE.structureDim, 0.35);
+        this.gfx.lineBetween(cx, ry + 15, x + w - 8, ry + 15);
+      }
+    });
+    return y + bh;
   }
 
   // ---- missions page -------------------------------------------------------------------------

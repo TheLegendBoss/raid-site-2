@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { generateTextures } from '../fx/textures';
+import { bakePixGuns, loadPixParts } from '../fx/pixGun';
 import { loadProfile } from '../game/profile';
 import { CLONE_PARTS } from '../fx/playerRig';
 import bodyUrl from '../assets/art/clone_body.png?url';
@@ -39,10 +40,12 @@ export class Boot extends Phaser.Scene {
 
   preload(): void {
     for (const key of CLONE_PARTS) this.load.image(key, CLONE_URLS[key]);
+    loadPixParts(this);
   }
 
   create(): void {
     generateTextures(this);
+    bakePixGuns(this);
     for (const key of CLONE_PARTS) this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
     // Load the save (a file on desktop, localStorage in a browser) before the room starts.
     void loadProfile().then(() => {

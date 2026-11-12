@@ -7,6 +7,8 @@ import { FONT, PALETTE, hex } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { runState } from '../game/runState';
 import { clamp } from '../sim/math';
+import { GUN_KITS } from '../data/gunKits';
+import { pixGunKey, pixMuzzle } from '../fx/pixGun';
 
 const FEED_LINES = 7;
 const BOLT_TRAVEL = 15; // px the bolt slides back
@@ -40,63 +42,14 @@ function chamfer(x: number, y: number, w: number, h: number, c: number): Phaser.
 }
 
 
-type Slab = [number, number, number, number, number]; // x, y, w, h, chamfer
-interface GunSpec {
-  stock?: Slab;
-  body: Slab;
-  parts: Slab[]; // handguard, barrel, brake and so on, drawn after the body
-  vents?: { x: number; n: number; step: number };
-  pump?: Slab; // slides back with the action
-  scope?: { slab: Slab; lens: [number, number] };
-  dot?: { x: number; y: number; color: number };
-  slide?: boolean; // the whole top slide cycles (pistol)
-  magX: number;
-  muzzle: [number, number];
-  port: [number, number, number]; // x, y, w of the ejection port and bolt
-}
-
-/** Side-on silhouettes for the non-SMG weapons, in the same coordinate space as drawSmg (stock end at 0). */
-const GUN_SPECS: Record<string, GunSpec> = {
-  pistol: {
-    body: [40, -16, 66, 22, 5],
-    parts: [[104, -10, 24, 16, 3], [128, -13, 8, 22, 2], [96, -26, 16, 9, 2]],
-    magX: 54, muzzle: [140, -3], port: [64, -14, 20], slide: true,
-  },
-  magnum: {
-    body: [34, -20, 56, 28, 6],
-    parts: [[90, -16, 62, 16, 3], [152, -20, 8, 24, 2], [92, -2, 48, 11, 2], [30, -28, 14, 12, 2]],
-    magX: 50, muzzle: [162, -8], port: [52, -17, 18], slide: false,
-  },
-  shotgun: {
-    stock: [0, -12, 34, 22, 4],
-    body: [34, -17, 60, 30, 6],
-    parts: [[94, -14, 88, 10, 2], [94, 0, 74, 10, 2], [180, -19, 6, 8, 1]],
-    pump: [112, -19, 36, 30, 4],
-    magX: 56, muzzle: [190, -9], port: [58, -15, 22],
-  },
-  marksman: {
-    stock: [0, -12, 32, 22, 4],
-    body: [32, -16, 60, 28, 5],
-    parts: [[92, -10, 82, 16, 3], [172, -14, 12, 24, 2]],
-    scope: { slab: [44, -40, 66, 16, 6], lens: [108, -32] },
-    magX: 50, muzzle: [190, -2], port: [58, -14, 22],
-  },
-  burst: {
-    stock: [0, -9, 18, 15, 3],
-    body: [18, -17, 78, 30, 6],
-    parts: [[96, -14, 48, 24, 4], [144, -9, 18, 8, 1.5], [160, -15, 14, 20, 2]],
-    vents: { x: 104, n: 5, step: 7 },
-    dot: { x: 56, y: -23.5, color: 0x6dff8a },
-    magX: 46, muzzle: [178, -5], port: [66, -15, 22],
-  },
-};
-
 export class Hud extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image;
   private hurt!: Phaser.GameObjects.Image;
   private chrome!: Phaser.GameObjects.Graphics;
   private bars!: Phaser.GameObjects.Graphics;
   private panel!: Phaser.GameObjects.Graphics;
+  private gunImg!: Phaser.GameObjects.Image;
+  private gunFx!: Phaser.GameObjects.Graphics;
   private cross!: Phaser.GameObjects.Graphics;
   private shieldLabel!: Txt;
   private hullLabel!: Txt;
@@ -160,6 +113,8 @@ export class Hud extends Phaser.Scene {
     this.chrome = this.add.graphics().setDepth(4);
     this.bars = this.add.graphics().setDepth(5);
     this.panel = this.add.graphics().setDepth(5);
+    this.gunImg = this.add.image(0, 0, 'pixgun_smg').setOrigin(0, 0).setDepth(6).setVisible(false);
+    this.gunFx = this.add.graphics().setDepth(7);
     this.cross = this.add.graphics().setDepth(9);
 
     const mk = (size: number, color: number, ox = 0, oy = 0, bold = false): Txt =>
@@ -721,147 +676,52 @@ export class Hud extends Phaser.Scene {
     return Math.floor(mag + (target - mag) * k);
   }
 
-  /** Draw the equipped weapon: the detailed SMG, or a spec-driven silhouette for the others. */
+  /**
+   * Draw the equipped weapon as a baked PIXWEP sprite. The action reads as recoil (the whole gun
+   * kicks back with the bolt), the magazine drops out of the well and seats again on reload, and
+   * the muzzle flash sits on the barrel end.
+   */
   private drawGun(shape: string, gx: number, gy: number, bolt: number, magY: number, magA: number, mag: number, muzzle: number): void {
-    const spec = GUN_SPECS[shape];
-    if (!spec) {
-      this.drawSmg(gx, gy, bolt, magY, magA, mag, muzzle);
-      return;
-    }
+    const kit = GUN_KITS[shape] ?? GUN_KITS.smg;
+    const key = pixGunKey(GUN_KITS[shape] ? shape : 'smg');
+    const sc = T.pixGun.scale;
+    const ix = gx + T.pixGun.x - bolt * T.pixGun.kick;
+    const iy = gy + T.pixGun.y;
+    this.gunImg.setTexture(key).setPosition(ix, iy).setScale(sc).setVisible(true);
+
     const g = this.panel;
-    const line = PALETTE.structure;
-    const body = 0x0b1a1c;
-    const poly = (pts: Phaser.Math.Vector2[], fill: number, fa: number, stroke: number, lw: number): void => {
-      g.fillStyle(fill, fa);
-      g.fillPoints(pts, true);
-      g.lineStyle(lw, stroke, 1);
-      g.strokePoints(pts, true);
-    };
-    const slab = (s: Slab, dx = 0, fill: number = body, fa = 1, stroke: number = line, lw = 2): void =>
-      poly(chamfer(gx + s[0] + dx, gy + s[1], s[2], s[3], s[4]), fill, fa, stroke, lw);
-
-    // Grip sleeve and the magazine inside it.
-    const mx = spec.magX;
-    poly(
-      [[mx - 2, 10], [mx + 20, 10], [mx + 16, 38], [mx - 6, 38]].map(([px, py]) => new Phaser.Math.Vector2(gx + px, gy + py)),
-      0x050d0e, 1, PALETTE.structureDim, 1.5,
-    );
+    const [mx, my, mw, mh] = kit.mag;
+    const mxp = gx + T.pixGun.x + mx * sc;
+    const myp = iy + my * sc + magY;
+    const mwp = mw * sc;
+    const mhp = mh * sc;
     if (magA > 0.01) {
-      slab([mx, 8 + magY, 16, 34, 3], 0, body, magA);
-      g.lineStyle(1, PALETTE.ammo, magA * 0.9);
-      const rounds = clamp(Math.ceil((mag / runState.magSize) * 5), 0, 5);
-      for (let i = 0; i < rounds; i++) g.lineBetween(gx + mx + 4, gy + 15 + magY + i * 5, gx + mx + 12, gy + 15 + magY + i * 5);
+      // Hard-edged, snapped to the sprite's pixel grid so it reads as part of the pixel gun.
+      const snap = (v: number): number => Math.round(v / sc) * sc;
+      const top = snap(myp);
+      g.fillStyle(0x0a0c0c, magA);
+      g.fillRect(mxp - sc, top - sc, mwp + 2 * sc, mhp + 2 * sc);
+      g.fillStyle(0x4e5450, magA);
+      g.fillRect(mxp, top, mwp, mhp);
+      g.fillStyle(0x2a2e2c, magA);
+      g.fillRect(mxp + mwp - sc, top, sc, mhp);
+      const rounds = clamp(Math.ceil((mag / runState.magSize) * 4), 0, 4);
+      g.fillStyle(PALETTE.ammo, magA);
+      for (let i = 0; i < rounds; i++) g.fillRect(mxp + sc, top + sc + i * (2 * sc), mwp - 3 * sc, sc);
     }
 
-    if (spec.stock) slab(spec.stock);
-    slab(spec.body, spec.slide ? -bolt * 0.6 : 0);
-    for (const p of spec.parts) slab(p);
-    if (spec.vents) {
-      g.lineStyle(1.5, PALETTE.structureDim, 1);
-      for (let i = 0; i < spec.vents.n; i++) {
-        g.lineBetween(gx + spec.vents.x + i * spec.vents.step, gy - 9, gx + spec.vents.x + i * spec.vents.step, gy + 5);
-      }
-    }
-    if (spec.scope) {
-      slab(spec.scope.slab, 0, 0x0d1c1e, 1, line, 1.8);
-      g.fillStyle(PALETTE.shield, 1);
-      g.fillCircle(gx + spec.scope.lens[0], gy + spec.scope.lens[1], 3);
-      g.fillStyle(PALETTE.shield, 0.25);
-      g.fillCircle(gx + spec.scope.lens[0], gy + spec.scope.lens[1], 7);
-    }
-    if (spec.dot) {
-      slab([spec.dot.x - 6, spec.dot.y - 6, 26, 11, 2], 0, 0x0d1c1e, 1, line, 1.8);
-      g.fillStyle(spec.dot.color, 1);
-      g.fillCircle(gx + spec.dot.x, gy + spec.dot.y, 2.2);
-      g.fillStyle(spec.dot.color, 0.25);
-      g.fillCircle(gx + spec.dot.x, gy + spec.dot.y, 5);
-    }
-    if (spec.pump) slab(spec.pump, -bolt * 1.6, 0x0d1c1e, 1, line, 2);
-
-    // Ejection port and the bolt sliding back over it.
-    const [px, py, pw] = spec.port;
-    slab([px, py, pw, 6, 1.5], 0, 0x000000, 1, PALETTE.structureDim, 1);
-    if (!spec.pump && !spec.slide) slab([px - bolt, py, pw, 7, 1.5], 0, PALETTE.ammo, 0.92, PALETTE.white, 1.4);
-
+    const f = this.gunFx;
+    f.clear();
     if (muzzle > 0.05) {
-      const fx = gx + spec.muzzle[0];
-      const fy = gy + spec.muzzle[1];
-      g.fillStyle(PALETTE.muzzle, muzzle * 0.9);
-      g.fillCircle(fx + 5, fy, 5 + muzzle * 5);
-      g.lineStyle(2, PALETTE.white, muzzle);
+      const tip = pixMuzzle[GUN_KITS[shape] ? shape : 'smg'];
+      const fx = ix + tip.x * sc;
+      const fy = iy + tip.y * sc;
+      f.fillStyle(PALETTE.muzzle, muzzle * 0.9);
+      f.fillCircle(fx + 5, fy, 5 + muzzle * 5);
+      f.lineStyle(2, PALETTE.white, muzzle);
       for (let i = -2; i <= 2; i++) {
         const a = i * 0.34;
-        g.lineBetween(fx, fy, fx + Math.cos(a) * (14 + muzzle * 12), fy + Math.sin(a) * (14 + muzzle * 12));
-      }
-    }
-  }
-
-  /** The SMG in profile, facing right. Matches the in-game model: folded stock, red dot, vented shroud. */
-  private drawSmg(gx: number, gy: number, bolt: number, magY: number, magA: number, mag: number, muzzle: number): void {
-    const g = this.panel;
-    const line = PALETTE.structure;
-    const body = 0x0b1a1c;
-    const poly = (pts: Phaser.Math.Vector2[], fill: number, fa: number, stroke: number, lw: number): void => {
-      g.fillStyle(fill, fa);
-      g.fillPoints(pts, true);
-      g.lineStyle(lw, stroke, 1);
-      g.strokePoints(pts, true);
-    };
-    const slab = (x: number, y: number, w: number, h: number, c: number, fill: number = body, fa = 1, stroke: number = line, lw = 2): void =>
-      poly(chamfer(gx + x, gy + y, w, h, c), fill, fa, stroke, lw);
-
-    // Grip sleeve, then the magazine inside it, so the receiver covers its top.
-    poly(
-      [[44, 10], [66, 10], [62, 38], [40, 38]].map(([px, py]) => new Phaser.Math.Vector2(gx + px, gy + py)),
-      0x050d0e, 1, PALETTE.structureDim, 1.5,
-    );
-    if (magA > 0.01) {
-      slab(46, 8 + magY, 16, 34, 3, body, magA, line, 2);
-      g.lineStyle(1, PALETTE.ammo, magA * 0.9);
-      const rounds = clamp(Math.ceil((mag / runState.magSize) * 5), 0, 5);
-      for (let i = 0; i < rounds; i++) g.lineBetween(gx + 50, gy + 15 + magY + i * 5, gx + 58, gy + 15 + magY + i * 5);
-    }
-
-    slab(0, -9, 22, 15, 3); // folded stock
-    g.lineStyle(1.5, PALETTE.structureDim, 1);
-    g.lineBetween(gx + 4, gy - 2, gx + 18, gy - 2);
-    slab(18, -17, 78, 30, 6); // receiver
-    g.lineStyle(1, line, 0.35);
-    g.lineBetween(gx + 24, gy - 13, gx + 90, gy - 13);
-    slab(96, -14, 44, 24, 4); // shroud
-    g.lineStyle(1.5, PALETTE.structureDim, 1);
-    for (let i = 0; i < 5; i++) g.lineBetween(gx + 104 + i * 7, gy - 9, gx + 104 + i * 7, gy + 5);
-    poly(chamfer(gx + 140, gy - 9, 20, 8, 1.5), body, 1, line, 2); // barrel
-    slab(160, -12, 12, 14, 2); // muzzle brake
-
-    // Red dot sight on the rail.
-    slab(50, -29, 26, 11, 2, 0x0d1c1e, 1, line, 1.8);
-    g.fillStyle(PALETTE.hostile, 1);
-    g.fillCircle(gx + 56, gy - 23.5, 2.2);
-    g.fillStyle(PALETTE.hostile, 0.25);
-    g.fillCircle(gx + 56, gy - 23.5, 5);
-
-    // Trigger guard.
-    g.lineStyle(1.5, line, 0.9);
-    g.beginPath();
-    g.moveTo(gx + 70, gy + 13);
-    g.lineTo(gx + 72, gy + 22);
-    g.lineTo(gx + 62, gy + 22);
-    g.strokePath();
-
-    // Ejection port, then the bolt sliding back over it.
-    slab(66, -15, 22, 6, 1.5, 0x000000, 1, PALETTE.structureDim, 1);
-    slab(70 - bolt, -15, 22, 7, 1.5, PALETTE.ammo, 0.92, PALETTE.white, 1.4);
-
-    if (muzzle > 0.05) {
-      const mx = gx + 174;
-      const my = gy - 5;
-      g.fillStyle(PALETTE.muzzle, muzzle * 0.9);
-      g.fillCircle(mx + 5, my, 5 + muzzle * 5);
-      g.lineStyle(2, PALETTE.white, muzzle);
-      for (let i = -2; i <= 2; i++) {
-        const a = i * 0.34;
-        g.lineBetween(mx, my, mx + Math.cos(a) * (14 + muzzle * 12), my + Math.sin(a) * (14 + muzzle * 12));
+        f.lineBetween(fx, fy, fx + Math.cos(a) * (14 + muzzle * 12), fy + Math.sin(a) * (14 + muzzle * 12));
       }
     }
   }
