@@ -9,7 +9,7 @@ export const TUNING = {
     followLerp: 9, // higher = snappier
     lookAhead: 0.2, // fraction of player->cursor vector the camera leans toward
     traumaDecay: 1.7,
-    shakeMaxOffset: 20,
+    shakeMaxOffset: 14,
     kickDecay: 14,
     zoomPunchDecay: 7,
   },
@@ -51,6 +51,7 @@ export const TUNING = {
     iconPx: 2,
     fontSizes: [8, 12, 16, 24, 32, 48, 64, 96],
     crossPx: 2,
+    reloadBar: { w: 56, h: 6 }, // the active reload bar under the reticle, in px
     crossGap: 8, // px between the cursor and the inner end of each crosshair arm at zero spread
     crossSpread: 2.6, // extra px of gap per degree of aim spread
   },
@@ -123,7 +124,7 @@ export const TUNING = {
     swordZoomPunch: 0.022,
     robotDeathZoomPunch: 0.035,
     comboWindow: 1.6,
-    heavyShotZoom: 0.03, // zoom thump per point of weapon heft above 1.2
+    heavyShotZoom: 0.02, // zoom thump per point of weapon heft above 1.2
     heavyShotRing: 0.12, // seconds the muzzle shockwave ring lives, times heft
   },
 
@@ -133,9 +134,9 @@ export const TUNING = {
     knock: 0.7, // knockback = base * (1 - knock/2 + knock * impact)
     heavyAt: 1.0, // impact at or above this gets hit-stop, shake and the heavy hit sound
     hitStop: 0.03, // per point of impact, once per trigger pull
-    hitTrauma: 0.045,
+    hitTrauma: 0.025,
     killStop: 0.03, // extra kill hit-stop per point of impact
-    killTrauma: 0.05,
+    killTrauma: 0.03,
     resistSparks: 7, // sparks thrown when armour turns a round away
   },
 

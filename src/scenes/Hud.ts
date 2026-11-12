@@ -51,7 +51,6 @@ export class Hud extends Phaser.Scene {
   private extractPanel!: Phaser.GameObjects.NineSlice;
   private carryPanel!: Phaser.GameObjects.NineSlice;
   private feedPanels: Phaser.GameObjects.NineSlice[] = [];
-  private arTrack!: Phaser.GameObjects.NineSlice;
   private xhArms: Phaser.GameObjects.Image[] = [];
   private xhDot!: Phaser.GameObjects.Image;
   private allText: Txt[] = [];
@@ -126,7 +125,6 @@ export class Hud extends Phaser.Scene {
     const A = T.ui.panelAlpha;
     this.carryPanel = uiPanel(this, 'panel', 0, 0, 10, 10).setDepth(4).setAlpha(A);
     this.extractPanel = uiPanel(this, 'btn', 0, 0, 10, 10).setDepth(7.5).setVisible(false);
-    this.arTrack = uiPanel(this, 'field', 0, 0, 10, 10).setDepth(4.9).setVisible(false);
     for (let i = 0; i < 2; i++) {
       this.slotPanels.push(uiPanel(this, 'btn', 0, 0, SLOT.w, SLOT.h).setDepth(4.5));
       this.slotIcons.push(uiIcon(this, i === 0 ? 'dash' : 'blade', 0, 0).setDepth(6));
@@ -551,7 +549,6 @@ export class Hud extends Phaser.Scene {
       }
     }
 
-    this.drawActiveReloadBar(x0, y0 - 34, WEP.w, reloading, p);
 
     // Numbers and status.
     const noAmmo = s.mag < 1 && s.reserve < 1 && !reloading;
@@ -591,52 +588,43 @@ export class Hud extends Phaser.Scene {
   }
 
   /**
-   * The Gears-style active reload bar, floating above the weapon panel. A dark track with a wide
-   * grey ACTIVE zone and the small white PERFECT zone inside it; a white tick sweeps left to right.
-   * Perfect flashes the whole bar white, active flashes it grey, a miss turns it red with the tick
-   * locked where the press landed. It only shows while reloading and for a moment after the result.
+   * The Gears-style active reload bar, small and right under the reticle so the eyes never leave the
+   * action. A dark track with a wide grey ACTIVE zone and the small white PERFECT zone inside it; a
+   * white tick sweeps left to right. Perfect flashes the bar white, active flashes it grey, a miss
+   * turns it red with the tick locked where the press landed. It only shows while reloading and for
+   * a moment after the result. It replaces the old reload ring.
    */
-  private drawActiveReloadBar(x: number, y: number, w: number, reloading: boolean, p: number): void {
+  private drawActiveReloadBar(cx: number, y: number, reloading: boolean, p: number): void {
     const s = runState;
-    const g = this.panel;
+    const g = this.cross;
     const result = s.activeResult;
     const after = !reloading && s.activeFlash > 0 && result !== '';
-    if (!reloading && !after) {
-      this.arTrack.setVisible(false);
-      return;
-    }
-    const bx = x + 14;
-    const bw = w - 28;
-    const bh = 16;
+    if (!reloading && !after) return;
+    const bw = T.ui.reloadBar.w;
+    const bh = T.ui.reloadBar.h;
+    const bx = cx - Math.round(bw / 2);
     const fade = reloading ? 1 : clamp(s.activeFlash / 0.35, 0, 1);
     const jam = result === 'fumble';
 
-    // Track: a pixel field, with the zones and the tick drawn over it.
-    sizePanel(this.arTrack, bx - FIELD_INSET, y - FIELD_INSET, bw + FIELD_INSET * 2, bh + FIELD_INSET * 2);
-    this.arTrack.setAlpha(fade).setVisible(true);
-    if (jam) this.arTrack.setTint(0xff7a6e);
-    else this.arTrack.clearTint();
-    g.fillStyle(jam ? 0x3a0d0d : 0x0e1514, 0.85 * fade);
+    // Track with a 1 px outline.
+    g.fillStyle(0x000000, 0.85 * fade);
+    g.fillRect(bx - 2, y - 2, bw + 4, bh + 4);
+    g.fillStyle(jam ? 0x3a0d0d : 0x15201f, fade);
     g.fillRect(bx, y, bw, bh);
 
     // Zones (hidden after a miss, like the action jamming shut).
     if (!jam && s.reloadGood1 > s.reloadGood0) {
-      const gx0 = bx + bw * clamp(s.reloadGood0, 0, 1);
-      const gx1 = bx + bw * clamp(s.reloadGood1, 0, 1);
-      g.fillStyle(0x9fb0ac, 0.55 * fade);
+      const gx0 = bx + Math.round(bw * clamp(s.reloadGood0, 0, 1));
+      const gx1 = bx + Math.round(bw * clamp(s.reloadGood1, 0, 1));
+      g.fillStyle(0x9fb0ac, 0.7 * fade);
       g.fillRect(gx0, y, gx1 - gx0, bh);
-      const px0 = bx + bw * clamp(s.reloadWin0, 0, 1);
-      const px1 = bx + bw * clamp(s.reloadWin1, 0, 1);
-      g.fillStyle(0xffffff, 0.95 * fade);
-      g.fillRect(px0, y, px1 - px0, bh);
+      const px0 = bx + Math.round(bw * clamp(s.reloadWin0, 0, 1));
+      const px1 = bx + Math.round(bw * clamp(s.reloadWin1, 0, 1));
+      g.fillStyle(0xffffff, fade);
+      g.fillRect(px0, y, Math.max(2, px1 - px0), bh);
     }
 
-    // Fill behind the tick, so the sweep reads at a glance.
     const prog = reloading ? clamp(p, 0, 1) : clamp(s.reloadMark, 0, 1);
-    if (reloading && !jam) {
-      g.fillStyle(PALETTE.ammo, 0.35);
-      g.fillRect(bx, y + bh - 3, bw * prog, 3);
-    }
 
     // Result flash over the whole bar.
     if (s.activeFlash > 0 && result) {
@@ -645,15 +633,12 @@ export class Hud extends Phaser.Scene {
       g.fillRect(bx, y, bw, bh);
     }
 
-    g.lineStyle(1.5, jam ? PALETTE.healthLow : PALETTE.ammo, 0.9 * fade);
-    g.strokeRect(bx, y, bw, bh);
-
     // The tick: sweeps while reloading, locks where the press landed on a miss.
-    const tx = bx + bw * (jam ? clamp(s.reloadMark, 0, 1) : prog);
-    g.fillStyle(0x000000, 0.8 * fade);
-    g.fillRect(tx - 2.5, y - 6, 5, bh + 12);
+    const tx = bx + Math.round(bw * (jam ? clamp(s.reloadMark, 0, 1) : prog));
+    g.fillStyle(0x000000, 0.9 * fade);
+    g.fillRect(tx - 2, y - 4, 4, bh + 8);
     g.fillStyle(jam ? PALETTE.healthLow : 0xffffff, fade);
-    g.fillRect(tx - 1.5, y - 6, 3, bh + 12);
+    g.fillRect(tx - 1, y - 3, 2, bh + 6);
   }
 
   /** How many cells read as loaded. While reloading they fill once the magazine has seated. */
@@ -774,23 +759,8 @@ export class Hud extends Phaser.Scene {
     right.setOrigin(0, 0.5).setFlipX(true).setPosition(cx + gap, cy).setTint(col);
     this.xhDot.setPosition(cx, cy).setTint(col);
 
-    // Reload progress sweeps around the cursor, where your eyes already are.
-    if (reloading) {
-      const r = gap + len + 10;
-      const a0 = -Math.PI / 2;
-      g.lineStyle(2, 0x000000, 0.45);
-      g.strokeCircle(p.x, p.y, r);
-      g.lineStyle(3, s.activeResult === 'fumble' ? PALETTE.healthLow : PALETTE.ammo, 0.95);
-      g.beginPath();
-      g.arc(p.x, p.y, r, a0, a0 + clamp(s.reload, 0, 1) * Math.PI * 2, false);
-      g.strokePath();
-    }
-    if (s.activeFlash > 0 && s.activeResult) {
-      const res = s.activeResult;
-      const r = gap + len + 10 + (1 - s.activeFlash) * (res === 'perfect' ? 30 : 18);
-      g.lineStyle(res === 'perfect' ? 4 : 3, res === 'perfect' ? PALETTE.white : res === 'good' ? PALETTE.player : PALETTE.healthLow, s.activeFlash);
-      g.strokeCircle(p.x, p.y, r);
-    }
+    // The active reload bar sits just under the reticle.
+    this.drawActiveReloadBar(cx, cy + gap + len + 8, reloading, s.reload);
 
     // Hit and kill markers.
     if (s.hitMarker > 0 || s.killMarker > 0.55) {
