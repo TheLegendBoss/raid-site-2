@@ -1,7 +1,8 @@
 // Static arena art, drawn once.
 import Phaser from 'phaser';
-import { PILLARS, PIPES, W, H, X0, X1, Y0, Y1 } from '../data/arena';
+import { EXTRACTS, PILLARS, PIPES, W, H, X0, X1, Y0, Y1 } from '../data/arena';
 import { PALETTE } from '../data/palette';
+import { TUNING as T } from '../data/tuning';
 
 export function drawFloor(scene: Phaser.Scene): void {
   const g = scene.add.graphics().setDepth(-30);
@@ -34,6 +35,25 @@ export function drawFloor(scene: Phaser.Scene): void {
     g.lineStyle(1.5, PALETTE.structureDim, 0.9);
     g.strokeCircle(p.x, p.y, 26);
     g.lineBetween(p.x + p.dx * 40, p.y + p.dy * 40, p.x + p.dx * 90, p.y + p.dy * 90);
+  }
+
+  // Extract pads: a ring, a cross-hatched deck and the chevrons of a lift shaft.
+  for (const e of EXTRACTS) {
+    const r = T.extract.padRadius;
+    g.fillStyle(0x04100f, 1);
+    g.fillCircle(e.x, e.y, r);
+    g.lineStyle(1, PALETTE.structureDim, 0.7);
+    for (let k = -r; k <= r; k += 14) g.lineBetween(e.x + k, e.y - Math.sqrt(r * r - k * k), e.x + k, e.y + Math.sqrt(r * r - k * k));
+    g.lineStyle(3, PALETTE.structure, 0.9);
+    g.strokeCircle(e.x, e.y, r);
+    g.lineStyle(1.5, PALETTE.structureDim, 0.9);
+    g.strokeCircle(e.x, e.y, r - 10);
+    g.lineStyle(3, PALETTE.structure, 0.8);
+    for (let i = -1; i <= 1; i++) {
+      const cy = e.y + i * 16;
+      g.lineBetween(e.x - 14, cy + 7, e.x, cy - 5);
+      g.lineBetween(e.x, cy - 5, e.x + 14, cy + 7);
+    }
   }
 
   // Outside the walls.

@@ -52,11 +52,11 @@ BASE (stash, quartermaster, loadout)
   -> BASE: sell, buy, equip
 ```
 
-- **Extract points:** one at the silo entrance and one after the Warden. Reaching either banks everything carried. Mid-floor extraction is out of scope.
+- **Extract points (decided, built):** only at the start and the end of each floor: the entry pad where you arrive, and the exit pad past the floor's Warden, sealed until it is beaten. Standing on an open pad and pressing X banks everything carried. No mid-floor extraction.
 - **Death:** **Carried** loot is lost. The **stash** and **equipped gear** survive. (Decided.) In the MVP the Aug simply regrows at the base. Post-MVP the Aug is lost and you play the next one from a finite pool, until research unlocks cloning.
 - **Clearing a silo:** defeating the Warden ends that silo. It pays a **completion reward** (a guaranteed item roll and a vault key or access card).
 - **Keys and gates:** each silo's gate needs a key found on that silo. Vault gates (later) need keys or gear dropped by silos, which is how the sites interlock.
-- **Game flow (built):** Title (Start, Dev Test) -> Base hub (Outfit, Missions, Research, Perks, all mouse and keyboard) -> deploy -> mission -> extract, die or abort -> back to the Base with a results strip. Outfitting happens only at the base, before deploying. The Missions page lists the Silo (deployable) and the Vault (sealed until it can be reached). Until the silo generator exists the Silo mission is the feel-test arena and X extracts from anywhere.
+- **Game flow (built):** Title (Start, Dev Test) -> Base hub (Outfit, Missions, Research, Perks, all mouse and keyboard) -> deploy -> mission -> extract, die or abort -> back to the Base with a results strip. Outfitting happens only at the base, before deploying. The Missions page lists the Silo (deployable) and the Vault (sealed until it can be reached). Until the silo generator exists the Silo mission is the feel-test arena with an ENTRY pad (spawn, always open) and an EXIT pad that opens after a few waves in place of the Warden; X extracts only on an open pad.
 - **Carry limit:** 10 carried slots. Full means you choose what to drop, which is the pressure that makes extracting a decision.
 
 ## 4. Player kit
@@ -66,7 +66,7 @@ BASE (stash, quartermaster, loadout)
 | Mouse + LMB | Primary weapon | Starts as the SMG: 30 round magazine, reserve ammo, tactical vs empty reload |
 | RMB / F | Arc blade | Windup, lunge, cleave; cooldown; kills refund reserve ammo and shield |
 | Shift / Space | Dash | Brief invulnerability; cooldown |
-| R | Reload | Press R again while the marker is in the window for an **active reload**: the magazine loads at once and every round in it hits 25% harder. A mistimed press fumbles once and sets the reload back. A research chip (Reload Drills) widens the window |
+| R | Reload | Gears-style **active reload**: a bar with a grey ACTIVE zone and a small white PERFECT zone, a tick sweeping across. R in the perfect zone loads at once and the magazine hits 25% harder; R in the active zone loads at once; a miss jams the action and sets the reload back. A research chip (Reload Drills) widens the perfect zone |
 | X | Extract (at an extract point only) | |
 
 The three verbs (shoot, cut, dash) do not change in the MVP. Gear changes how well and how differently they work.

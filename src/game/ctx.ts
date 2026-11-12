@@ -13,6 +13,7 @@ import type { BladeSystem } from './systems/blade';
 import type { CameraSystem } from './systems/camera';
 import type { CombatSystem } from './systems/combat';
 import type { GunSystem } from './systems/gun';
+import type { ExtractSystem } from './systems/extract';
 import type { LootSystem } from './systems/loot';
 import type { MobSystem } from './systems/mobs';
 import type { PlayerSystem } from './systems/player';
@@ -42,6 +43,7 @@ export class Ctx {
   combat!: CombatSystem;
   mobSys!: MobSystem;
   lootSys!: LootSystem;
+  extractSys!: ExtractSystem;
   cam!: CameraSystem;
 
   /** Expanding ring flourish. */

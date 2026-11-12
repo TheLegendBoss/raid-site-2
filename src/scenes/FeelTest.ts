@@ -5,7 +5,7 @@
 // This scene is only the loop and the wiring. Rules and effects live in
 // src/game/systems/*, state in src/game/world.ts.
 import Phaser from 'phaser';
-import { H, W } from '../data/arena';
+import { H, SPAWN, W } from '../data/arena';
 import { PALETTE } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { getSfx } from '../fx/audio';
@@ -22,6 +22,7 @@ import { BladeSystem } from '../game/systems/blade';
 import { CameraSystem } from '../game/systems/camera';
 import { CombatSystem } from '../game/systems/combat';
 import { GunSystem } from '../game/systems/gun';
+import { ExtractSystem } from '../game/systems/extract';
 import { LootSystem } from '../game/systems/loot';
 import { MobSystem } from '../game/systems/mobs';
 import { PlayerSystem } from '../game/systems/player';
@@ -117,6 +118,7 @@ export class FeelTest extends Phaser.Scene {
     g.combat = new CombatSystem(g);
     g.mobSys = new MobSystem(g);
     g.lootSys = new LootSystem(g);
+    g.extractSys = new ExtractSystem(g);
     g.cam = new CameraSystem(g);
 
     this.events.on('resume', () => this.input.keyboard!.resetKeys());
@@ -165,6 +167,7 @@ export class FeelTest extends Phaser.Scene {
     g.mobSys.updateMobs(dt);
     g.gunSys.updateBullets(dt);
     g.lootSys.updateDrops(dt);
+    g.extractSys.update(dt);
     g.particles.update(dt);
     g.glows.update(dt);
     g.nums.update(dt);
@@ -274,7 +277,7 @@ export class FeelTest extends Phaser.Scene {
     if (K.JustDown(this.g.keys.H)) runState.showHelp = !runState.showHelp;
     if (K.JustDown(this.g.keys.M)) this.g.sfx.setMuted(!this.g.sfx.muted);
     if (K.JustDown(this.g.keys.ESC)) return this.openPause();
-    if (K.JustDown(this.g.keys.X)) {
+    if (K.JustDown(this.g.keys.X) && this.g.extractSys.canExtract()) {
       const r = this.g.lootSys.extract();
       if (this.mode === 'mission' && (!r || r.left === 0)) this.endMission('extracted', r ?? undefined);
     }
@@ -300,8 +303,8 @@ export class FeelTest extends Phaser.Scene {
       d.beam?.destroy();
     }
     this.w.drops = [];
-    this.w.px = W / 2;
-    this.w.py = H / 2;
+    this.w.px = SPAWN.x;
+    this.w.py = SPAWN.y;
     this.w.pvx = this.w.pvy = this.w.lungeX = this.w.lungeY = 0;
     this.w.camX = this.w.px;
     this.w.camY = this.w.py;

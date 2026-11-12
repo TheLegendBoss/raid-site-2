@@ -61,13 +61,16 @@ export const TUNING = {
     magInAt: 0.7, // fraction of the reload at which the new mag seats
     // Active reload: press R again while the marker is inside the window to finish at once and
     // load the magazine hot. Press outside it and the weapon fumbles (once per reload).
+    // Gears-style: a small white PERFECT zone sits inside a wider grey ACTIVE zone. Perfect loads the
+    // magazine at once and hot; active loads it at once; a miss jams the action and sets the reload back.
     activeReload: {
-      start: 0.46, // window start, as a fraction of the reload
-      width: 0.15, // window width; the activeWidth stat scales it
-      maxWidth: 0.3,
-      bonusDamage: 0.25, // extra damage for the whole magazine after a good reload
-      fumbleSetback: 0.35, // fraction of the reload lost on a mistimed press
-      feedbackSeconds: 0.9, // how long the HUD result flash lasts
+      start: 0.5, // centre of the zones, as a fraction of the reload
+      width: 0.08, // perfect zone width; the activeWidth stat scales it
+      maxWidth: 0.2,
+      goodPad: 0.09, // the active zone extends this far either side of the perfect zone
+      bonusDamage: 0.25, // extra damage for the whole magazine after a perfect reload
+      fumbleSetback: 0.4, // fraction of the reload lost on a mistimed press
+      feedbackSeconds: 1.1, // how long the HUD result stays up
     },
     recoilImpulse: 38,
     cameraKick: 3.2, // px opposite the aim per shot
@@ -170,6 +173,11 @@ export const TUNING = {
     shieldSize: 21,
     refundSize: 16,
     pool: { gun: 36, blade: 16, hurt: 8, shield: 8, refund: 8 },
+  },
+
+  extract: {
+    padRadius: 70, // stand inside to extract
+    exitAfterWave: 3, // waves cleared before the floor's exit pad opens (stand-in for the Warden)
   },
 
   loot: {

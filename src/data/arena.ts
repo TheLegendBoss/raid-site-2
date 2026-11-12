@@ -19,6 +19,13 @@ export const PILLARS: Rect[] = [
   { x: 900, y: 746, w: 200, h: 34 },
 ];
 
+/** Extract points: the floor's entry (where you arrive) and its exit (opens once the floor is beaten). */
+export const EXTRACTS = [
+  { id: 'entry', x: X0 + 330, y: Y0 + 330, label: 'ENTRY' },
+  { id: 'exit', x: X1 - 330, y: Y1 - 330, label: 'EXIT' },
+] as const;
+export const SPAWN = { x: EXTRACTS[0].x, y: EXTRACTS[0].y };
+
 // Where things pour out of the walls.
 export const PIPES = [
   { x: X0, y: 330, dx: 1, dy: 0 },

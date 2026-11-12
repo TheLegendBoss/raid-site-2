@@ -133,8 +133,13 @@ export class GunSystem {
     s.reload = 0;
     s.reloadEmpty = this.w.reloadWasEmpty;
     const AR = T.gun.activeReload;
-    s.reloadWin0 = AR.start;
-    s.reloadWin1 = AR.start + profile.stats.activeWidth;
+    const half = profile.stats.activeWidth / 2;
+    s.reloadWin0 = AR.start - half;
+    s.reloadWin1 = AR.start + half;
+    s.reloadGood0 = s.reloadWin0 - AR.goodPad;
+    s.reloadGood1 = s.reloadWin1 + AR.goodPad;
+    s.activeResult = '';
+    s.activeFlash = 0;
     this.g.sfx.magOut();
     // The spent magazine drops to the floor beside the clone.
     const side = this.w.aim + Math.PI / 2;
@@ -167,17 +172,20 @@ export class GunSystem {
     const AR = T.gun.activeReload;
     if (this.w.reloadFumbled) return;
     const p = s.reload;
-    if (p >= s.reloadWin0 && p <= s.reloadWin1) {
+    s.reloadMark = p;
+    const perfect = p >= s.reloadWin0 && p <= s.reloadWin1;
+    const good = p >= s.reloadGood0 && p <= s.reloadGood1;
+    if (perfect || good) {
       if (!this.w.reloadMagIn) {
         this.w.reloadMagIn = true;
         this.g.sfx.magIn();
       }
-      this.finishReload(true);
+      this.finishReload(perfect);
       s.activeFlash = 1;
-      s.activeResult = 'perfect';
-      this.g.sfx.activeReload();
-      this.g.glows.at(this.w.px, this.w.py, PALETTE.ammo, 2.4, 1.3, 0.16, 0.3);
-      this.w.trauma = Math.min(1, this.w.trauma + 0.07);
+      s.activeResult = perfect ? 'perfect' : 'good';
+      this.g.sfx.activeReload(perfect);
+      this.g.glows.at(this.w.px, this.w.py, perfect ? PALETTE.white : PALETTE.ammo, perfect ? 2.6 : 1.8, 1.3, 0.16, perfect ? 0.35 : 0.22);
+      this.w.trauma = Math.min(1, this.w.trauma + (perfect ? 0.07 : 0.04));
       this.g.rig.kick();
     } else {
       this.w.reloadFumbled = true;

@@ -224,10 +224,11 @@ export class Sfx {
   }
 
   /** Active reload landed: a crisp, satisfying double click. */
-  activeReload(): void {
+  activeReload(perfect = true): void {
     if (!this.gate('active', 60)) return;
     this.burst({ filter: 'highpass', f0: 4200, dur: 0.025, gain: 0.4, wet: 0.1 });
     this.tone({ type: 'square', f0: 880, f1: 1320, dur: 0.07, gain: 0.14, wet: 0.25 });
+    if (!perfect) return; // the active (not perfect) reload is a single clean click
     window.setTimeout(() => {
       this.tone({ type: 'triangle', f0: 1320, f1: 1760, dur: 0.12, gain: 0.16, wet: 0.35 });
       this.burst({ filter: 'highpass', f0: 3000, dur: 0.03, gain: 0.3, wet: 0.1 });

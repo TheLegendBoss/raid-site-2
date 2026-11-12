@@ -29,7 +29,7 @@ To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z
 
 ## Flow
 
-Title screen: **Start** goes to the base, **Dev Test** goes straight into the feel-test room with every debug key. At the base, everything works with the mouse and the keyboard: **Outfit** (equip from the stash, buy baseline gear from the quartermaster, sell or dismantle stashed items), **Missions** (Silo is deployable, Vault is sealed), **Research** and **Perks** (the trees). Outfit before you deploy: there is no outfitting in a mission. A mission ends when you extract (X, banks what you carry), die (carried loot is lost) or abort from the pause menu; either way you return to the base with a results strip.
+Title screen: **Start** goes to the base, **Dev Test** goes straight into the feel-test room with every debug key. At the base, everything works with the mouse and the keyboard: **Outfit** (equip from the stash, buy baseline gear from the quartermaster, sell or dismantle stashed items), **Missions** (Silo is deployable, Vault is sealed), **Research** and **Perks** (the trees). Outfit before you deploy: there is no outfitting in a mission. A mission ends when you extract at a pad (X, banks what you carry), die (carried loot is lost) or abort from the pause menu; either way you return to the base with a results strip.
 
 ## Controls
 
@@ -38,10 +38,10 @@ Title screen: **Start** goes to the base, **Dev Test** goes straight into the fe
 | WASD | Move |
 | Mouse | Aim |
 | Left mouse | SMG: 30-round magazine plus reserve. Empty trigger pull auto-reloads |
-| R | Reload (tactical reload is quicker than reloading from empty). Press R again while the marker is in the green window for an active reload: the magazine loads at once and every round in it hits 25% harder. A mistimed press jams the reload and sets it back |
+| R | Reload (tactical reload is quicker than reloading from empty). Active reload, Gears style: a bar appears above the weapon with a grey ACTIVE zone and a small white PERFECT zone; press R again as the tick crosses them. Perfect loads the magazine at once and every round in it hits 25% harder; active loads it at once; a miss jams the action (the bar turns red) and sets the reload back |
 | Right mouse or F | Arc blade: wind-up, lunging cleave, bisects scavengers. 0.8s cooldown; kills refund reserve ammo and shield |
 | Shift or Space | Dash (brief invulnerability, 0.9s cooldown) |
-| X | Extract: bank carried loot into the stash |
+| X | Extract, only while standing on a pad: the ENTRY pad where you arrive, or the EXIT pad, which stays sealed until the floor is beaten (for now: 3 waves cleared). Banks carried loot and ends the mission |
 | Esc | Pause menu (resume, sound, abort mission or exit to title) |
 | Tab | Dev test only: open the Research and Perk trees (at the base they are on the RESEARCH and PERKS tabs) |
 | B | Dev test only: open the outfit screen over the room |

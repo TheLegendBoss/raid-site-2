@@ -21,10 +21,15 @@ export interface RunState {
   maxReserve: number;
   reload: number; // -1 when idle, otherwise 0..1 progress
   reloadEmpty: boolean; // the current reload started from an empty mag
-  reloadWin0: number; // active reload window, as fractions of the reload (width 0 when there is none)
+  reloadWin0: number; // PERFECT zone, as fractions of the reload (width 0 when there is none)
   reloadWin1: number;
+  reloadGood0: number; // ACTIVE zone, which contains the perfect zone
+  reloadGood1: number;
+  reloadMark: number; // where the marker was when the result happened (drawn locked on a miss)
   activeFlash: number; // 0..1, decays: result of the last active reload press
-  activeResult: 'perfect' | 'fumble' | '';
+  activeResult: 'perfect' | 'good' | 'fumble' | '';
+  extractPrompt: string; // '' off a pad; otherwise the HUD prompt
+  extractOpen: boolean; // the pad under the player can be used
   hotMag: boolean; // the loaded magazine carries the active reload damage bonus
   shotSeq: number; // increments once per round fired; the HUD animates on change
   dryFlash: number; // 0..1, decays: trigger pulled with nothing to fire
@@ -74,6 +79,11 @@ export const runState: RunState = {
   reloadEmpty: false,
   reloadWin0: 0,
   reloadWin1: 0,
+  reloadGood0: 0,
+  reloadGood1: 0,
+  reloadMark: 0,
+  extractPrompt: '',
+  extractOpen: false,
   activeFlash: 0,
   activeResult: '',
   hotMag: false,
