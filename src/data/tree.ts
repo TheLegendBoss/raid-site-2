@@ -11,7 +11,7 @@ export type StatKey =
   | 'hull' | 'shield' | 'shieldRegenRate' | 'shieldRegenDelay' | 'moveSpeed'
   | 'dashCooldown' | 'gunDamage' | 'spread' | 'reloadTime' | 'magSize'
   | 'reserveMax' | 'bladeDamage' | 'bladeCooldown' | 'bladeReach' | 'bladeRefund'
-  | 'magnetRadius' | 'carrySlots' | 'intelGain';
+  | 'magnetRadius' | 'carrySlots' | 'intelGain' | 'activeWidth';
 
 /** `add` is flat; `pct` is a fraction (0.1 = +10%). Both stack across nodes. */
 export interface Effect {
@@ -70,6 +70,7 @@ export const STAT_LABELS: Record<StatKey, string> = {
   gunDamage: 'Gun damage',
   spread: 'Gun spread',
   reloadTime: 'Reload time',
+  activeWidth: 'Active reload window',
   magSize: 'Magazine',
   reserveMax: 'Reserve',
   bladeDamage: 'Blade damage',
@@ -110,6 +111,8 @@ export const TREE_NODES: readonly TreeNode[] = [
     desc: 'Weave spare rounds into the rig.', effects: [{ stat: 'reserveMax', add: 30 }] },
   { id: 'r_feed', tree: R, kind: 'chip', name: 'FAST FEED', icon: 'reload', tint: 'orange', cost: 40, requires: 'r_ammo1',
     desc: 'A sprung feed tray seats magazines faster.', effects: [{ stat: 'reloadTime', pct: -0.1 }] },
+  { id: 'r_drill', tree: R, kind: 'chip', name: 'RELOAD DRILLS', icon: 'reload', tint: 'orange', cost: 60, requires: 'r_ammo2',
+    desc: 'Rehearsed hands. The active reload window is wider.', effects: [{ stat: 'activeWidth', pct: 0.4 }] },
   { id: 'r_ammo2', tree: R, kind: 'main', name: 'AMMO LOOM II', icon: 'reserve', tint: 'orange', cost: 140, requires: 'r_ammo1', col: 2, row: 1,
     desc: 'Denser weave, more rounds.', effects: [{ stat: 'reserveMax', add: 50 }] },
   { id: 'r_ammo3', tree: R, kind: 'main', name: 'LONG MAGS', icon: 'mag', tint: 'orange', cost: 320, requires: 'r_ammo2', col: 3, row: 1,

@@ -67,6 +67,7 @@ export interface EffectiveStats {
   magnetRadius: number;
   carrySlots: number;
   intelGain: number; // multiplier
+  activeWidth: number; // active reload window, fraction of the reload
   weapon: WeaponStats;
   blade: BladeStats;
 }
@@ -109,6 +110,7 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
     magnetRadius: T.loot.magnetRadius,
     carrySlots: T.loot.carrySlots + pk.carry,
     intelGain: 1,
+    activeWidth: T.gun.activeReload.width,
   };
 
   const add: Partial<Record<StatKey, number>> = {};
@@ -143,6 +145,7 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
     magnetRadius: v('magnetRadius'),
     carrySlots: Math.max(4, Math.round(v('carrySlots'))),
     intelGain: v('intelGain'),
+    activeWidth: Math.min(T.gun.activeReload.maxWidth, v('activeWidth')),
     weapon: {
       name: pri.def!.name, shape: wp.shape, armsKey: wp.armsKey, muzzleOffset: wp.muzzleOffset, muzzleSide: wp.muzzleSide,
       fireDelay: wp.fireDelay, damageVariance: wp.damageVariance, pellets: wp.pellets, bulletSpeed: wp.bulletSpeed,

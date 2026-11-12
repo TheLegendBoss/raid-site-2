@@ -8,13 +8,14 @@ import Phaser from 'phaser';
 import { H, W } from '../data/arena';
 import { PALETTE } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
-import { Sfx } from '../fx/audio';
+import { getSfx } from '../fx/audio';
 import { drawFloor } from '../fx/arenaArt';
 import { DamageNumbers } from '../fx/damageNumbers';
 import { Glows } from '../fx/glows';
 import { Particles } from '../fx/particles';
 import { PlayerRig } from '../fx/playerRig';
 import { Ctx } from '../game/ctx';
+import type { MissionResult } from '../game/mission';
 import { onStatsChanged, profile } from '../game/profile';
 import { resetVitals, runState, setBanner } from '../game/runState';
 import { BladeSystem } from '../game/systems/blade';
@@ -34,12 +35,29 @@ export class FeelTest extends Phaser.Scene {
   private w = new World();
   private g!: Ctx;
 
+  /** 'dev' is the free-play test room; 'mission' is a deployment that ends by extracting, dying or aborting. */
+  private mode: 'dev' | 'mission' = 'dev';
+  private missionId = 'dev';
+  private startIntel = 0;
+  private ending = false;
+
   constructor() {
     super('FeelTest');
   }
 
+  init(data: { mode?: 'dev' | 'mission'; missionId?: string }): void {
+    this.mode = data.mode ?? 'dev';
+    this.missionId = data.missionId ?? 'dev';
+    this.ending = false;
+    this.w = new World();
+  }
+
   create(): void {
-    const g = new Ctx(this, this.w, new Sfx(), new Rng((Date.now() ^ 0x9e3779b9) >>> 0));
+    runState.devMode = this.mode === 'dev';
+    runState.carried = [];
+    runState.carriedScrap = 0;
+    this.startIntel = profile.intel;
+    const g = new Ctx(this, this.w, getSfx(), new Rng((Date.now() ^ 0x9e3779b9) >>> 0));
     this.g = g;
     this.w = g.w;
 
@@ -47,7 +65,7 @@ export class FeelTest extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.setDefaultCursor('none');
     g.keys = this.input.keyboard!.addKeys(
-      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO,TAB,B',
+      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO,TAB,B,ESC',
     ) as unknown as KeyMap;
 
     const unlock = (): void => g.sfx.unlock();
@@ -61,9 +79,13 @@ export class FeelTest extends Phaser.Scene {
     g.fxGfx = this.add.graphics().setDepth(16);
 
     g.rig = new PlayerRig(this, 14);
-    onStatsChanged((st) => {
+    const off = onStatsChanged((st) => {
       g.rig.setWeapon(st.weapon.armsKey);
       g.rig.setBlade(st.blade.spriteKey);
+    });
+    this.events.once('shutdown', () => {
+      off();
+      this.input.setDefaultCursor('default');
     });
     g.rig.setWeapon(profile.stats.weapon.armsKey);
     g.rig.setBlade(profile.stats.blade.spriteKey);
@@ -99,6 +121,8 @@ export class FeelTest extends Phaser.Scene {
 
     this.events.on('resume', () => this.input.keyboard!.resetKeys());
     this.resetWorld(true);
+    this.cameras.main.fadeIn(300, 2, 6, 8);
+    if (!this.scene.isActive('Hud')) this.scene.launch('Hud');
   }
 
   // ------------------------------------------------------------------
@@ -126,7 +150,10 @@ export class FeelTest extends Phaser.Scene {
       g.glows.update(dt);
       g.nums.update(dt);
       g.cam.applyCamera(dt, false);
-      if (w.deadTimer <= 0) this.resetWorld(false);
+      if (w.deadTimer <= 0) {
+        if (this.mode === 'mission') this.endMission('lost');
+        else this.resetWorld(false);
+      }
       return;
     }
 
@@ -152,6 +179,7 @@ export class FeelTest extends Phaser.Scene {
     s.killMarker = Math.max(0, s.killMarker - dt * 3.5);
     s.refundFlash = Math.max(0, s.refundFlash - dt * 2.2);
     s.dryFlash = Math.max(0, s.dryFlash - dt * 4);
+    s.activeFlash = Math.max(0, s.activeFlash - dt / T.gun.activeReload.feedbackSeconds);
     s.dashPing = Math.max(0, s.dashPing - dt * 3);
     s.bladePing = Math.max(0, s.bladePing - dt * 3);
     s.dashDeny = Math.max(0, s.dashDeny - dt * 4);
@@ -188,6 +216,47 @@ export class FeelTest extends Phaser.Scene {
     this.w.aim = Math.atan2(this.w.mouseY - this.w.py, this.w.mouseX - this.w.px);
   }
 
+  private openPause(): void {
+    this.scene.pause();
+    this.scene.launch('Pause', {
+      mission: this.mode === 'mission',
+      onLeave: () => (this.mode === 'mission' ? this.endMission('aborted') : this.exitToTitle()),
+    });
+    this.scene.bringToTop('Pause');
+  }
+
+  private exitToTitle(): void {
+    if (this.ending) return;
+    this.ending = true;
+    this.scene.stop('Hud');
+    this.scene.start('Title');
+  }
+
+  /** Leave the room for the base. Extracting banks the haul; dying or aborting loses what was carried. */
+  private endMission(outcome: MissionResult['outcome'], banked?: { items: number; scrap: number }): void {
+    if (this.ending) return;
+    this.ending = true;
+    let lost = 0;
+    if (outcome === 'lost') lost = runState.lastLost;
+    if (outcome === 'aborted') {
+      lost = runState.carried.length + (runState.carriedScrap > 0 ? 1 : 0);
+      runState.carried = [];
+      runState.carriedScrap = 0;
+    }
+    const result: MissionResult = {
+      missionId: this.missionId,
+      outcome,
+      items: banked?.items ?? 0,
+      scrap: banked?.scrap ?? 0,
+      lost,
+      intel: Math.max(0, profile.intel - this.startIntel),
+      wave: this.w.wave,
+    };
+    this.scene.stop('Hud');
+    this.cameras.main.fadeOut(outcome === 'lost' ? 500 : 350, 2, 6, 8);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Base', { mode: 'hub', result }));
+  }
+
   private openTree(): void {
     this.scene.pause();
     this.scene.launch('Tree', { sfx: this.g.sfx });
@@ -196,19 +265,24 @@ export class FeelTest extends Phaser.Scene {
 
   private openBase(): void {
     this.scene.pause();
-    this.scene.launch('Base', { sfx: this.g.sfx });
+    this.scene.launch('Base', { mode: 'overlay', sfx: this.g.sfx });
     this.scene.bringToTop('Base');
   }
 
   private handleDebugKeys(): void {
     const K = Phaser.Input.Keyboard;
+    if (K.JustDown(this.g.keys.H)) runState.showHelp = !runState.showHelp;
+    if (K.JustDown(this.g.keys.M)) this.g.sfx.setMuted(!this.g.sfx.muted);
+    if (K.JustDown(this.g.keys.ESC)) return this.openPause();
+    if (K.JustDown(this.g.keys.X)) {
+      const r = this.g.lootSys.extract();
+      if (this.mode === 'mission' && (!r || r.left === 0)) this.endMission('extracted', r ?? undefined);
+    }
+    if (this.mode !== 'dev') return;
     if (K.JustDown(this.g.keys.ONE)) this.g.mobSys.queueSwarm(T.waves.swarmSize);
     if (K.JustDown(this.g.keys.TWO)) this.g.mobSys.queueSpawn('robot', 0);
     if (K.JustDown(this.g.keys.K)) this.g.mobSys.killAll();
     if (K.JustDown(this.g.keys.T)) this.resetWorld(false);
-    if (K.JustDown(this.g.keys.H)) runState.showHelp = !runState.showHelp;
-    if (K.JustDown(this.g.keys.M)) this.g.sfx.setMuted(!this.g.sfx.muted);
-    if (K.JustDown(this.g.keys.X)) this.g.lootSys.extract();
     if (K.JustDown(this.g.keys.TAB)) this.openTree();
     if (K.JustDown(this.g.keys.B)) this.openBase();
   }

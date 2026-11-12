@@ -1,0 +1,105 @@
+// Pause menu over the room. In a mission, leaving aborts it (carried loot is lost, like dying
+// without the death); in the dev test it just goes back to the title.
+import Phaser from 'phaser';
+import { FONT, PALETTE, hex } from '../data/palette';
+import { getSfx } from '../fx/audio';
+import { Menu } from '../ui/menu';
+import { showCursor } from '../ui/cursor';
+
+export interface PauseData {
+  mission: boolean;
+  onLeave: () => void;
+}
+
+export class Pause extends Phaser.Scene {
+  private data0!: PauseData;
+  private menu!: Menu;
+  private dim!: Phaser.GameObjects.Rectangle;
+  private head!: Phaser.GameObjects.Text;
+  private note!: Phaser.GameObjects.Text;
+  private keys!: Record<string, Phaser.Input.Keyboard.Key>;
+  private armed = false;
+
+  constructor() {
+    super('Pause');
+  }
+
+  init(data: PauseData): void {
+    this.data0 = data;
+  }
+
+  create(): void {
+    const sfx = getSfx();
+    showCursor(this, true);
+    this.armed = false;
+    this.dim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.66).setOrigin(0, 0).setDepth(0);
+    this.head = this.add
+      .text(0, 0, 'PAUSED', { fontFamily: FONT, fontSize: '44px', color: '#ffffff' })
+      .setOrigin(0.5).setResolution(2).setDepth(5);
+    this.note = this.add
+      .text(0, 0, '', { fontFamily: FONT, fontSize: '13px', color: hex(PALETTE.textDim), align: 'center' })
+      .setOrigin(0.5, 0).setResolution(2).setDepth(5);
+    const mission = this.data0.mission;
+    this.menu = new Menu(
+      this,
+      [
+        { label: 'RESUME', run: () => this.resume() },
+        { label: sfx.muted ? 'SOUND: OFF' : 'SOUND: ON', sub: 'Toggle all audio', run: () => this.toggleSound() },
+        {
+          label: mission ? 'ABORT MISSION' : 'EXIT TO TITLE',
+          sub: mission ? 'Back to base. Carried loot is lost.' : undefined,
+          run: () => this.leave(),
+        },
+      ],
+      340, 54, 12, () => sfx.step(), () => sfx.empty(),
+    );
+    this.keys = this.input.keyboard!.addKeys('UP,DOWN,W,S,ENTER,SPACE,ESC') as Record<string, Phaser.Input.Keyboard.Key>;
+    this.input.on('gameout', () => this.menu.pointerOut());
+    this.scale.on('resize', this.layout, this);
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.layout, this);
+      this.menu.destroy();
+    });
+    this.layout();
+    // The ESC that opened this menu is still held; ignore it until it is released.
+    this.time.delayedCall(120, () => (this.armed = true));
+  }
+
+  private toggleSound(): void {
+    const sfx = getSfx();
+    sfx.setMuted(!sfx.muted);
+    // Rebuilding keeps the label honest; the menu is three buttons.
+    this.menu.destroy();
+    this.scene.restart(this.data0);
+  }
+
+  private resume(): void {
+    showCursor(this, false);
+    this.scene.resume('FeelTest');
+    this.scene.stop();
+  }
+
+  private leave(): void {
+    this.scene.stop();
+    this.data0.onLeave();
+  }
+
+  private layout(): void {
+    const w = this.scale.width;
+    const h = this.scale.height;
+    this.dim.setSize(w, h);
+    const top = h * 0.5 - 120;
+    this.head.setPosition(w / 2, top);
+    this.menu.layout(w / 2, top + 50);
+    this.note.setPosition(w / 2, top + 50 + this.menu.height + 20).setText('ESC to resume');
+  }
+
+  update(): void {
+    const K = Phaser.Input.Keyboard;
+    if (!this.armed) return;
+    if (K.JustDown(this.keys.ESC)) return this.resume();
+    if (K.JustDown(this.keys.UP) || K.JustDown(this.keys.W)) this.menu.move(-1);
+    if (K.JustDown(this.keys.DOWN) || K.JustDown(this.keys.S)) this.menu.move(1);
+    if (K.JustDown(this.keys.ENTER) || K.JustDown(this.keys.SPACE)) this.menu.activate();
+  }
+}

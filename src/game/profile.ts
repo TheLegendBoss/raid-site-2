@@ -44,8 +44,12 @@ export const profile: {
 type Listener = (s: EffectiveStats) => void;
 const listeners: Listener[] = [];
 /** Called after every stats refresh (equip, unlock, load). The scene uses it to swap art. */
-export function onStatsChanged(cb: Listener): void {
+export function onStatsChanged(cb: Listener): () => void {
   listeners.push(cb);
+  return () => {
+    const i = listeners.indexOf(cb);
+    if (i >= 0) listeners.splice(i, 1);
+  };
 }
 
 /** Recompute stats and push the maxima into runState. Raising a max also raises the current value. */

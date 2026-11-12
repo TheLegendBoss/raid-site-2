@@ -3,7 +3,7 @@ import type { Item } from '../sim/loot';
 
 export type KeyName =
   | 'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'
-  | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'T' | 'H' | 'ONE' | 'TWO' | 'TAB' | 'B';
+  | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'T' | 'H' | 'ONE' | 'TWO' | 'TAB' | 'B' | 'ESC';
 export type KeyMap = Record<KeyName, Phaser.Input.Keyboard.Key>;
 
 export type MobKind = 'scav' | 'robot';

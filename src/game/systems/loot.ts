@@ -119,11 +119,12 @@ export class LootSystem {
     }
   }
 
-  extract(): void {
+  /** Bank everything carried. Null when there was nothing to bank. */
+  extract(): { items: number; scrap: number; left: number } | null {
     const n = runState.carried.length;
     if (n === 0 && runState.carriedScrap === 0) {
       pushFeed('Nothing to extract', PALETTE.textDim);
-      return;
+      return null;
     }
     const r = extractAll();
     if (r.items > 0) pushFeed(`Extracted ${r.items} item${r.items > 1 ? 's' : ''} to the stash`, PALETTE.structure);
@@ -132,5 +133,6 @@ export class LootSystem {
     setBanner('EXTRACTED', 1.4);
     this.g.sfx.pickup(5);
     this.g.ring(this.w.px, this.w.py, PALETTE.structure, 0.6, 7);
+    return r;
   }
 }

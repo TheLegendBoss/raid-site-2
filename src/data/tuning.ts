@@ -59,6 +59,16 @@ export const TUNING = {
     reloadTime: 1.15, // tactical reload: rounds left in the mag
     reloadTimeEmpty: 1.6, // empty reload: bolt has to be racked
     magInAt: 0.7, // fraction of the reload at which the new mag seats
+    // Active reload: press R again while the marker is inside the window to finish at once and
+    // load the magazine hot. Press outside it and the weapon fumbles (once per reload).
+    activeReload: {
+      start: 0.46, // window start, as a fraction of the reload
+      width: 0.15, // window width; the activeWidth stat scales it
+      maxWidth: 0.3,
+      bonusDamage: 0.25, // extra damage for the whole magazine after a good reload
+      fumbleSetback: 0.35, // fraction of the reload lost on a mistimed press
+      feedbackSeconds: 0.9, // how long the HUD result flash lasts
+    },
     recoilImpulse: 38,
     cameraKick: 3.2, // px opposite the aim per shot
     shotTrauma: 0.045,

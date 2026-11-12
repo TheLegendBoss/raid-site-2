@@ -206,11 +206,12 @@ export class Hud extends Phaser.Scene {
       this.helpText,
       [
         'WASD move   SHIFT / SPACE dash',
-        'LMB fire   R reload',
+        'LMB fire   R reload (R again in the green window: active reload)',
         'RMB / F arc blade',
         'blade kills refund reserve ammo + shield',
-        '1 swarm   2 robot   K clear   T reset room',
-        'X extract   B base   TAB trees   M mute   H hide help',
+        ...(runState.devMode
+          ? ['1 swarm   2 robot   K clear   T reset room', 'X extract   B base   TAB trees   ESC pause   M mute   H hide help']
+          : ['X extract and leave   ESC pause   M mute   H hide help']),
       ].join('\n'),
     );
   }
@@ -435,7 +436,7 @@ export class Hud extends Phaser.Scene {
     const g = this.bars;
     this.setText(
       this.carryText,
-      `CARRIED ${s.carried.length}/${profile.stats.carrySlots}${s.carriedScrap > 0 ? `  +${s.carriedScrap} scrap` : ''}   SCRAP ${profile.scrap}   INTEL ${profile.intel}   [X] extract   [B] base   [TAB] trees`,
+      `CARRIED ${s.carried.length}/${profile.stats.carrySlots}${s.carriedScrap > 0 ? `  +${s.carriedScrap} scrap` : ''}   SCRAP ${profile.scrap}   INTEL ${profile.intel}   [X] extract${runState.devMode ? '   [B] base   [TAB] trees' : '   [ESC] pause'}`,
     );
     this.carryText.setPosition(w / 2, h - MARGIN);
     const cw = this.carryText.width + 28;
@@ -582,21 +583,39 @@ export class Hud extends Phaser.Scene {
       }
     }
 
-    // Reload bar under the header.
+    // Reload bar under the header, with the active reload window and the marker that has to land in it.
     if (reloading) {
+      const bw = WEP.w - 28;
       g.fillStyle(0x000000, 0.6);
-      g.fillRect(x0 + 14, y0 + 32, WEP.w - 28, 3);
+      g.fillRect(x0 + 14, y0 + 30, bw, 6);
       g.fillStyle(PALETTE.ammo, 1);
-      g.fillRect(x0 + 14, y0 + 32, (WEP.w - 28) * clamp(p, 0, 1), 3);
+      g.fillRect(x0 + 14, y0 + 31, bw * clamp(p, 0, 1), 4);
+      if (s.reloadWin1 > s.reloadWin0 && s.activeResult !== 'fumble') {
+        g.fillStyle(PALETTE.player, 0.95);
+        g.fillRect(x0 + 14 + bw * s.reloadWin0, y0 + 28, bw * (s.reloadWin1 - s.reloadWin0), 10);
+        g.lineStyle(1, PALETTE.white, 0.9);
+        g.strokeRect(x0 + 14 + bw * s.reloadWin0, y0 + 28, bw * (s.reloadWin1 - s.reloadWin0), 10);
+      }
+      g.fillStyle(PALETTE.white, 1);
+      g.fillRect(x0 + 14 + bw * clamp(p, 0, 1) - 1, y0 + 26, 3, 14);
     }
 
     // Numbers and status.
     const noAmmo = s.mag < 1 && s.reserve < 1 && !reloading;
     let state = '';
     let stateColor: number = PALETTE.textDim;
-    if (reloading) {
+    if (s.activeFlash > 0.35 && s.activeResult === 'perfect') {
+      state = `ACTIVE RELOAD  +${Math.round(T.gun.activeReload.bonusDamage * 100)}% DMG`;
+      stateColor = PALETTE.player;
+    } else if (s.activeFlash > 0.35 && s.activeResult === 'fumble') {
+      state = 'JAMMED';
+      stateColor = PALETTE.healthLow;
+    } else if (reloading) {
       state = s.reloadEmpty ? 'RELOADING  (BOLT)' : 'RELOADING';
       stateColor = PALETTE.ammo;
+    } else if (s.hotMag) {
+      state = 'HOT MAG';
+      stateColor = PALETTE.player;
     } else if (noAmmo) {
       state = 'NO AMMO';
       stateColor = PALETTE.healthLow;
@@ -842,10 +861,28 @@ export class Hud extends Phaser.Scene {
     // Reload progress sweeps around the cursor, where your eyes already are.
     if (reloading) {
       const r = gap + len + 8;
+      const a0 = -Math.PI / 2;
+      g.lineStyle(2, 0x000000, 0.45);
+      g.strokeCircle(p.x, p.y, r);
+      if (s.reloadWin1 > s.reloadWin0 && s.activeResult !== 'fumble') {
+        g.lineStyle(6, PALETTE.player, 0.95);
+        g.beginPath();
+        g.arc(p.x, p.y, r, a0 + s.reloadWin0 * Math.PI * 2, a0 + s.reloadWin1 * Math.PI * 2, false);
+        g.strokePath();
+      }
       g.lineStyle(3, PALETTE.ammo, 0.95);
       g.beginPath();
-      g.arc(p.x, p.y, r, -Math.PI / 2, -Math.PI / 2 + clamp(s.reload, 0, 1) * Math.PI * 2, false);
+      g.arc(p.x, p.y, r, a0, a0 + clamp(s.reload, 0, 1) * Math.PI * 2, false);
       g.strokePath();
+      const ma = a0 + clamp(s.reload, 0, 1) * Math.PI * 2;
+      g.lineStyle(3, PALETTE.white, 1);
+      g.lineBetween(p.x + Math.cos(ma) * (r - 6), p.y + Math.sin(ma) * (r - 6), p.x + Math.cos(ma) * (r + 6), p.y + Math.sin(ma) * (r + 6));
+    }
+    if (s.activeFlash > 0 && s.activeResult) {
+      const good = s.activeResult === 'perfect';
+      const r = gap + len + 8 + (1 - s.activeFlash) * 26;
+      g.lineStyle(good ? 4 : 3, good ? PALETTE.player : PALETTE.healthLow, s.activeFlash);
+      g.strokeCircle(p.x, p.y, r);
     }
 
     // Hit and kill markers.

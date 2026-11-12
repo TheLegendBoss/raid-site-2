@@ -21,6 +21,11 @@ export interface RunState {
   maxReserve: number;
   reload: number; // -1 when idle, otherwise 0..1 progress
   reloadEmpty: boolean; // the current reload started from an empty mag
+  reloadWin0: number; // active reload window, as fractions of the reload (width 0 when there is none)
+  reloadWin1: number;
+  activeFlash: number; // 0..1, decays: result of the last active reload press
+  activeResult: 'perfect' | 'fumble' | '';
+  hotMag: boolean; // the loaded magazine carries the active reload damage bonus
   shotSeq: number; // increments once per round fired; the HUD animates on change
   dryFlash: number; // 0..1, decays: trigger pulled with nothing to fire
 
@@ -51,6 +56,8 @@ export interface RunState {
   bannerTime: number;
   muted: boolean;
   showHelp: boolean;
+  devMode: boolean; // the dev test room: base and trees open from the room
+  lastLost: number; // items lost in the most recent death
 }
 
 export const runState: RunState = {
@@ -65,6 +72,11 @@ export const runState: RunState = {
   maxReserve: TUNING.gun.maxReserve,
   reload: -1,
   reloadEmpty: false,
+  reloadWin0: 0,
+  reloadWin1: 0,
+  activeFlash: 0,
+  activeResult: '',
+  hotMag: false,
   shotSeq: 0,
   dryFlash: 0,
 
@@ -94,6 +106,8 @@ export const runState: RunState = {
   bannerTime: 0,
   muted: false,
   showHelp: true,
+  devMode: false,
+  lastLost: 0,
 };
 
 export function resetVitals(): void {
@@ -102,6 +116,8 @@ export function resetVitals(): void {
   runState.mag = runState.magSize;
   runState.reserve = TUNING.gun.startReserve;
   runState.reload = -1;
+  runState.hotMag = false;
+  runState.activeFlash = 0;
   runState.dashReady = 1;
   runState.bladeReady = 1;
   runState.damageFlash = 0;

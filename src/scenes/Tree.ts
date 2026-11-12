@@ -13,7 +13,8 @@ import {
   type TreeNode,
 } from '../data/tree';
 import { drawIcon } from '../fx/treeIcons';
-import type { Sfx } from '../fx/audio';
+import { getSfx, type Sfx } from '../fx/audio';
+import { showCursor } from '../ui/cursor';
 import { profile, tryUnlock } from '../game/profile';
 import { checkUnlock, nodesOf } from '../sim/tree';
 
@@ -80,12 +81,16 @@ export class Tree extends Phaser.Scene {
     super('Tree');
   }
 
-  init(data: { sfx?: Sfx; tab?: TreeId }): void {
-    this.sfx = data.sfx;
+  private returnTo = 'FeelTest';
+
+  init(data: { sfx?: Sfx; tab?: TreeId; returnTo?: string }): void {
+    this.sfx = data.sfx ?? getSfx();
+    this.returnTo = data.returnTo ?? 'FeelTest';
     this.tab = data.tab ?? this.tab;
   }
 
   create(): void {
+    showCursor(this, true);
     this.views.clear();
     this.tabText = [];
     this.bg = this.add.rectangle(0, 0, 10, 10, PALETTE.bg, 1).setOrigin(0, 0).setDepth(0);
@@ -609,7 +614,8 @@ export class Tree extends Phaser.Scene {
   }
 
   private close(): void {
-    this.scene.resume('FeelTest');
+    if (this.returnTo === 'FeelTest') showCursor(this, false);
+    this.scene.resume(this.returnTo);
     this.scene.stop();
   }
 }

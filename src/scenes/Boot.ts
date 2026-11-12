@@ -28,8 +28,8 @@ const CLONE_URLS: Record<(typeof CLONE_PARTS)[number], string> = {
   clone_stiletto: stilettoUrl,
 };
 
-// Loads the vex-built character parts, bakes the small effect textures from vector drawing, then
-// starts the game scene with the HUD running on top as its own scene.
+// Loads the vex-built character parts, bakes the small effect textures from vector drawing, loads
+// the save, then hands over to the title screen.
 export class Boot extends Phaser.Scene {
   constructor() {
     super('Boot');
@@ -44,8 +44,7 @@ export class Boot extends Phaser.Scene {
     for (const key of CLONE_PARTS) this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
     // Load the save (a file on desktop, localStorage in a browser) before the room starts.
     void loadProfile().then(() => {
-      this.scene.start('FeelTest');
-      this.scene.launch('Hud');
+      this.scene.start('Title');
     });
   }
 }

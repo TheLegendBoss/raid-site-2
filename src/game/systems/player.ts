@@ -156,6 +156,7 @@ export class PlayerSystem {
     const lost = runState.carried.length + (runState.carriedScrap > 0 ? 1 : 0);
     runState.carried = [];
     runState.carriedScrap = 0;
+    runState.lastLost = lost;
     setBanner('CLONE LOST', 1.9);
     pushFeed(lost > 0 ? `Cargo lost: ${lost} item${lost > 1 ? 's' : ''}` : 'Clone lost', PALETTE.hostile);
     this.g.rig.setVisible(false);

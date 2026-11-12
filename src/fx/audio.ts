@@ -223,6 +223,24 @@ export class Sfx {
     }, 70);
   }
 
+  /** Active reload landed: a crisp, satisfying double click. */
+  activeReload(): void {
+    if (!this.gate('active', 60)) return;
+    this.burst({ filter: 'highpass', f0: 4200, dur: 0.025, gain: 0.4, wet: 0.1 });
+    this.tone({ type: 'square', f0: 880, f1: 1320, dur: 0.07, gain: 0.14, wet: 0.25 });
+    window.setTimeout(() => {
+      this.tone({ type: 'triangle', f0: 1320, f1: 1760, dur: 0.12, gain: 0.16, wet: 0.35 });
+      this.burst({ filter: 'highpass', f0: 3000, dur: 0.03, gain: 0.3, wet: 0.1 });
+    }, 55);
+  }
+
+  /** Mistimed active reload: the action jams. */
+  reloadJam(): void {
+    if (!this.gate('jam', 80)) return;
+    this.tone({ type: 'sawtooth', f0: 170, f1: 70, dur: 0.16, gain: 0.2, wet: 0.2 });
+    this.burst({ filter: 'bandpass', f0: 900, q: 3, dur: 0.08, gain: 0.25, wet: 0.1 });
+  }
+
   windup(): void {
     if (!this.gate('windup', 40)) return;
     this.tone({ type: 'sawtooth', f0: 90, f1: 210, dur: 0.1, gain: 0.16, wet: 0.2 });
@@ -317,4 +335,11 @@ export class Sfx {
     if (rarity < 3 || !this.gate('drop', 120)) return;
     this.tone({ type: 'triangle', f0: 300 * Math.pow(1.1, rarity), f1: 600 * Math.pow(1.1, rarity), dur: 0.3, gain: 0.08, attack: 0.05, wet: 0.6 });
   }
+}
+
+let shared: Sfx | null = null;
+/** One audio context for the whole game, shared by every scene. */
+export function getSfx(): Sfx {
+  if (!shared) shared = new Sfx();
+  return shared;
 }

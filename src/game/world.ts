@@ -47,6 +47,8 @@ export class World {
   reloadTime: number = T.gun.reloadTime;
   reloadMagIn = false;
   reloadWasEmpty = false;
+  reloadFumbled = false; // a mistimed active-reload press already happened this reload
+  hotMag = false; // the current magazine was loaded with an active reload
 
   // room
   wave = 0;

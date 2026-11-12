@@ -25,7 +25,10 @@ export class GunSystem {
     this.w.bloom = Math.max(0, this.w.bloom - 14 * dt);
     s.reserve = Math.min(s.maxReserve, s.reserve + G.reserveRegenPerSec * dt);
 
-    if (Phaser.Input.Keyboard.JustDown(this.g.keys.R)) this.startReload();
+    if (Phaser.Input.Keyboard.JustDown(this.g.keys.R)) {
+      if (this.w.reloadT >= 0) this.activeReloadPress();
+      else this.startReload();
+    }
     if (this.w.reloadT >= 0) {
       this.w.burstLeft = 0;
       this.tickReload(dt);
@@ -84,10 +87,14 @@ export class GunSystem {
       : this.w.aim;
     for (let i = 0; i < wp.pellets; i++) {
       const a = toCursor + (Math.random() - 0.5) * 2 * cone;
-      const dmg = rollDamage(this.g.rng, profile.stats.gunDamage, wp.damageVariance);
+      const dmg = Math.round(rollDamage(this.g.rng, profile.stats.gunDamage, wp.damageVariance) * (this.w.hotMag ? 1 + T.gun.activeReload.bonusDamage : 1));
       this.fireBullet(mx, my, a, wp.bulletSpeed, dmg, true, wp.bulletLife, 0xe9fff6, wp.bulletW, wp.bulletH, wp.pierce);
     }
     this.w.bloom = Math.min(5.5, this.w.bloom + 0.9);
+    if (s.mag < 1) {
+      this.w.hotMag = false;
+      s.hotMag = false;
+    }
     if (s.mag < 1 && s.reserve >= 1) this.startReload();
 
     // Juice: flash, light, casing, recoil, kick, noise. Heavier weapons flash and kick bigger.
@@ -120,8 +127,14 @@ export class GunSystem {
     this.w.reloadTime = this.w.reloadWasEmpty ? profile.stats.reloadTimeEmpty : profile.stats.reloadTime;
     this.w.reloadT = 0;
     this.w.reloadMagIn = false;
+    this.w.reloadFumbled = false;
+    this.w.hotMag = false; // the old magazine and its bonus drop to the floor
+    s.hotMag = false;
     s.reload = 0;
     s.reloadEmpty = this.w.reloadWasEmpty;
+    const AR = T.gun.activeReload;
+    s.reloadWin0 = AR.start;
+    s.reloadWin1 = AR.start + profile.stats.activeWidth;
     this.g.sfx.magOut();
     // The spent magazine drops to the floor beside the clone.
     const side = this.w.aim + Math.PI / 2;
@@ -148,8 +161,40 @@ export class GunSystem {
     if (p >= 1) this.finishReload();
   }
 
-  finishReload(): void {
+  /** Second R press during a reload: inside the window it finishes hot, outside it fumbles once. */
+  private activeReloadPress(): void {
     const s = runState;
+    const AR = T.gun.activeReload;
+    if (this.w.reloadFumbled) return;
+    const p = s.reload;
+    if (p >= s.reloadWin0 && p <= s.reloadWin1) {
+      if (!this.w.reloadMagIn) {
+        this.w.reloadMagIn = true;
+        this.g.sfx.magIn();
+      }
+      this.finishReload(true);
+      s.activeFlash = 1;
+      s.activeResult = 'perfect';
+      this.g.sfx.activeReload();
+      this.g.glows.at(this.w.px, this.w.py, PALETTE.ammo, 2.4, 1.3, 0.16, 0.3);
+      this.w.trauma = Math.min(1, this.w.trauma + 0.07);
+      this.g.rig.kick();
+    } else {
+      this.w.reloadFumbled = true;
+      this.w.reloadT = Math.max(0, this.w.reloadT - AR.fumbleSetback * this.w.reloadTime);
+      s.reload = clamp(this.w.reloadT / this.w.reloadTime, 0, 1);
+      if (s.reload < T.gun.magInAt) this.w.reloadMagIn = false;
+      s.activeFlash = 1;
+      s.activeResult = 'fumble';
+      this.g.sfx.reloadJam();
+      this.w.trauma = Math.min(1, this.w.trauma + 0.05);
+    }
+  }
+
+  finishReload(hot = false): void {
+    const s = runState;
+    this.w.hotMag = hot;
+    s.hotMag = hot;
     const take = Math.min(s.magSize - s.mag, Math.floor(s.reserve));
     s.mag += take;
     s.reserve -= take;

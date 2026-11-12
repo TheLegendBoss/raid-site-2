@@ -8,6 +8,8 @@ import { Base } from './scenes/Base';
 import { Boot } from './scenes/Boot';
 import { FeelTest } from './scenes/FeelTest';
 import { Hud } from './scenes/Hud';
+import { Pause } from './scenes/Pause';
+import { Title } from './scenes/Title';
 import { Tree } from './scenes/Tree';
 
 const game = new Phaser.Game({
@@ -20,7 +22,7 @@ const game = new Phaser.Game({
     height: '100%',
   },
   render: { antialias: true },
-  scene: [Boot, FeelTest, Hud, Tree, Base],
+  scene: [Boot, Title, Base, FeelTest, Hud, Tree, Pause],
 });
 
 // Dev-only handle so smoke tests and the console can inspect live state.
