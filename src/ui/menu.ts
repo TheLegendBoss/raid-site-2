@@ -2,6 +2,7 @@
 // plus keyboard focus (move / activate) driven by the owning scene.
 import Phaser from 'phaser';
 import { FONT, PALETTE, hex } from '../data/palette';
+import { snapFont } from './pixelUi';
 
 export interface MenuItem {
   label: string;
@@ -37,10 +38,10 @@ export class Menu {
     for (const item of items) {
       const bg = scene.add.graphics().setDepth(10);
       const label = scene.add
-        .text(0, 0, item.label, { fontFamily: FONT, fontSize: '20px', color: '#ffffff' })
-        .setResolution(2).setDepth(11);
+        .text(0, 0, item.label, { fontFamily: FONT, fontSize: `${snapFont(22)}px`, color: '#ffffff' })
+        .setResolution(1).setDepth(11);
       const sub = item.sub
-        ? scene.add.text(0, 0, item.sub, { fontFamily: FONT, fontSize: '12px', color: hex(PALETTE.textDim) }).setResolution(2).setDepth(11)
+        ? scene.add.text(0, 0, item.sub, { fontFamily: FONT, fontSize: `${snapFont(12)}px`, color: hex(PALETTE.textDim) }).setResolution(1).setDepth(11)
         : undefined;
       const zone = scene.add.zone(0, 0, w, h).setOrigin(0, 0).setInteractive({ useHandCursor: false }).setDepth(12);
       const slot: Slot = { item, bg, label, sub, zone };

@@ -4,6 +4,7 @@ import { FONT, PALETTE, hex } from '../data/palette';
 import { getSfx } from '../fx/audio';
 import { Menu } from '../ui/menu';
 import { showCursor } from '../ui/cursor';
+import { snapFont } from '../ui/pixelUi';
 
 export class Title extends Phaser.Scene {
   private menu!: Menu;
@@ -12,6 +13,7 @@ export class Title extends Phaser.Scene {
   private title!: Phaser.GameObjects.Text;
   private tag!: Phaser.GameObjects.Text;
   private foot!: Phaser.GameObjects.Text;
+  private credit!: Phaser.GameObjects.Text;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private t = 0;
   private leaving = false;
@@ -33,15 +35,19 @@ export class Title extends Phaser.Scene {
     this.grid = this.add.graphics().setDepth(0);
     this.scan = this.add.rectangle(0, 0, 10, 2, PALETTE.structure, 0.12).setOrigin(0, 0).setDepth(1);
     this.title = this.add
-      .text(0, 0, 'RAID SITE 2', { fontFamily: FONT, fontSize: '84px', color: '#ffffff' })
-      .setOrigin(0.5, 0.5).setResolution(2).setDepth(5);
+      .text(0, 0, 'RAID SITE 2', { fontFamily: FONT, fontSize: '96px', color: '#ffffff' })
+      .setOrigin(0.5, 0.5).setResolution(1).setDepth(5);
     this.title.setShadow(0, 0, hex(PALETTE.structure), 22, false, true);
     this.tag = this.add
       .text(0, 0, 'RECLAIM THE DERELICT WORLD', { fontFamily: FONT, fontSize: '16px', color: hex(PALETTE.textDim) })
-      .setOrigin(0.5, 0.5).setResolution(2).setDepth(5);
+      .setOrigin(0.5, 0.5).setResolution(1).setDepth(5);
     this.foot = this.add
-      .text(0, 0, '↑ ↓ select   ENTER confirm   or use the mouse', { fontFamily: FONT, fontSize: '13px', color: hex(PALETTE.textDim) })
-      .setOrigin(0.5, 1).setResolution(2).setDepth(5);
+      .text(0, 0, 'UP/DOWN select   ENTER confirm   or use the mouse', { fontFamily: FONT, fontSize: '12px', color: hex(PALETTE.textDim) })
+      .setOrigin(0.5, 1).setResolution(1).setDepth(5);
+
+    this.credit = this.add
+      .text(0, 0, 'Font: Poco by fontenddev.com (CC BY 4.0)   UI: Waste No Space, Mystery Attic, KabGames (CC0)', { fontFamily: FONT, fontSize: '12px', color: hex(PALETTE.textDim) })
+      .setOrigin(0.5, 1).setResolution(1).setDepth(5);
 
     this.menu = new Menu(
       this,
@@ -74,10 +80,11 @@ export class Title extends Phaser.Scene {
   private layout(): void {
     const w = this.scale.width;
     const h = this.scale.height;
-    this.title.setPosition(w / 2, h * 0.27).setFontSize(Math.min(84, Math.max(40, w / 12)));
-    this.tag.setPosition(w / 2, h * 0.27 + Math.min(84, Math.max(40, w / 12)) * 0.75);
+    this.title.setPosition(w / 2, h * 0.27).setFontSize(snapFont(Math.min(84, Math.max(40, w / 12))));
+    this.tag.setPosition(w / 2, h * 0.27 + snapFont(Math.min(84, Math.max(40, w / 12))) * 0.75);
     this.menu.layout(w / 2, h * 0.5);
-    this.foot.setPosition(w / 2, h - 22);
+    this.foot.setPosition(w / 2, h - 34);
+    this.credit.setPosition(w / 2, h - 10);
     this.scan.setSize(w, 2);
     this.grid.clear();
     this.grid.lineStyle(1, PALETTE.structureDim, 0.22);

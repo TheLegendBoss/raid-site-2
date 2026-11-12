@@ -34,11 +34,11 @@ export class Pause extends Phaser.Scene {
     this.armed = false;
     this.dim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.66).setOrigin(0, 0).setDepth(0);
     this.head = this.add
-      .text(0, 0, 'PAUSED', { fontFamily: FONT, fontSize: '44px', color: '#ffffff' })
-      .setOrigin(0.5).setResolution(2).setDepth(5);
+      .text(0, 0, 'PAUSED', { fontFamily: FONT, fontSize: '48px', color: '#ffffff' })
+      .setOrigin(0.5).setResolution(1).setDepth(5);
     this.note = this.add
-      .text(0, 0, '', { fontFamily: FONT, fontSize: '13px', color: hex(PALETTE.textDim), align: 'center' })
-      .setOrigin(0.5, 0).setResolution(2).setDepth(5);
+      .text(0, 0, '', { fontFamily: FONT, fontSize: '12px', color: hex(PALETTE.textDim), align: 'center' })
+      .setOrigin(0.5, 0).setResolution(1).setDepth(5);
     const mission = this.data0.mission;
     this.menu = new Menu(
       this,

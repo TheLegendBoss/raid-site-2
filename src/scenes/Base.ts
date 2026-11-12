@@ -20,11 +20,13 @@ import {
 } from '../game/profile';
 import type { MissionResult } from '../game/mission';
 import { runState } from '../game/runState';
+import { TUNING as T } from '../data/tuning';
 import { statLines, type StatLine } from '../sim/describe';
 import { GUN_KITS, KIT_SLOTS, PART_NAMES } from '../data/gunKits';
 import { pixGunKey, pixMagKey } from '../fx/pixGun';
 import { baseOf, buyPrice, dismantleIntel, rarityLabel, sellValue, type Item } from '../sim/loot';
 import { showCursor } from '../ui/cursor';
+import { snapFont, snapText, uiIcon, uiPanel, type PanelKind } from '../ui/pixelUi';
 
 type Txt = Phaser.GameObjects.Text;
 type Mode = 'hub' | 'overlay';
@@ -484,23 +486,29 @@ export class Base extends Phaser.Scene {
 
   private text(x: number, y: number, s: string, size: number, color: number, origin: [number, number] = [0, 0]): Txt {
     const t = this.add
-      .text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color: hex(color) })
-      .setResolution(2)
+      .text(x, y, s, { fontFamily: FONT, fontSize: `${snapFont(size)}px`, color: hex(color) })
+      .setResolution(1)
       .setOrigin(origin[0], origin[1])
       .setDepth(5);
+    snapText(t);
     this.dyn.push(t);
     return t;
+  }
+
+  /** A Waste No Space 9-slice box behind the text and lines (depth 0.5, under the Graphics at 1). */
+  private box(kind: PanelKind, x: number, y: number, w: number, h: number, alpha = 1, tint?: number): Phaser.GameObjects.NineSlice {
+    const n = uiPanel(this, kind, Math.round(x), Math.round(y), w, h).setDepth(0.5).setAlpha(alpha);
+    if (tint !== undefined) n.setTint(tint);
+    this.dyn.push(n);
+    return n;
   }
 
   private hit(id: string, x: number, y: number, w: number, h: number, run: () => void, enabled = true): void {
     this.hits.push({ id, x, y, w, h, run, enabled });
   }
 
-  private panel(x: number, y: number, w: number, h: number, color: number = PALETTE.structureDim): void {
-    this.gfx.fillStyle(0x050c10, 0.9);
-    this.gfx.fillRect(x, y, w, h);
-    this.gfx.lineStyle(1.5, color, 0.9);
-    this.gfx.strokeRect(x, y, w, h);
+  private panel(x: number, y: number, w: number, h: number): void {
+    this.box('panel', x, y, w, h, T.ui.panelAlpha);
   }
 
   private render(): void {
@@ -530,38 +538,37 @@ export class Base extends Phaser.Scene {
   }
 
   private drawChrome(w: number, h: number): void {
-    const g = this.gfx;
-    g.fillStyle(0x040a0d, 1);
-    g.fillRect(0, 0, w, HEADER_H);
-    g.fillRect(0, h - FOOTER_H, w, FOOTER_H);
-    g.lineStyle(1, PALETTE.structureDim, 0.8);
-    g.lineBetween(0, HEADER_H, w, HEADER_H);
-    g.lineBetween(0, h - FOOTER_H, w, h - FOOTER_H);
+    // Header and footer are panels pushed past the screen edge so only the inner border shows.
+    this.box('panel', -12, -12, w + 24, HEADER_H + 12);
+    this.box('panel', -12, h - FOOTER_H, w + 24, FOOTER_H + 12);
     this.text(24, 14, this.mode === 'hub' ? '| BASE |' : '| OUTFIT |', 26, PALETTE.text);
 
     if (this.mode === 'hub') {
       let tx = 26;
       for (const p of PAGES) {
         const on = p.id === this.page;
-        const tt = this.text(tx, 52, `${on ? '[' : ' '}${p.label}${on ? ']' : ' '}`, 14, on ? PALETTE.white : PALETTE.textDim);
+        const tt = this.text(tx + 16, on ? 56 : 58, p.label, 16, on ? PALETTE.white : PALETTE.textDim);
         const id = p.id;
-        this.hit(`page:${id}`, tx - 6, 46, tt.width + 12, 28, () => {
+        // The tab sits on the header's lower border; the active one stands a little taller.
+        this.box(on ? 'tab_sel' : 'tab_un', tx, on ? 44 : 48, tt.width + 32, on ? 42 : 38);
+        this.hit(`page:${id}`, tx, 44, tt.width + 32, 42, () => {
           if (id === 'research' || id === 'perks') this.openTree(id);
           else this.setPage(id);
         });
-        tx += tt.width + 18;
+        tx += tt.width + 40;
       }
-      const t = this.text(w - 24, 52, '◄ TITLE  [ESC]', 13, PALETTE.textDim, [1, 0]);
-      this.hit('title', w - 24 - t.width - 8, 46, t.width + 16, 28, () => this.toTitle());
+      const t = this.text(w - 42, 55, '< TITLE  [ESC]', 16, PALETTE.text, [1, 0]);
+      this.box('btn', w - 24 - t.width - 36, 44, t.width + 36, 38);
+      this.hit('title', w - 24 - t.width - 36, 44, t.width + 36, 38, () => this.toTitle());
     }
-    const intel = this.text(w - 24, 14, `INTEL ${profile.intel}`, 18, PALETTE.robot, [1, 0]);
-    this.text(w - 24 - intel.width - 28, 14, `SCRAP ${profile.scrap}`, 18, PALETTE.scrap, [1, 0]);
+    const intel = this.text(w - 24, 14, `INTEL ${profile.intel}`, 16, PALETTE.robot, [1, 0]);
+    this.text(w - 24 - intel.width - 28, 14, `SCRAP ${profile.scrap}`, 16, PALETTE.scrap, [1, 0]);
 
     const hint = this.mode === 'overlay'
-      ? '← → tabs   ↑ ↓ select   E equip   M move   S sell   D dismantle   TAB trees   ESC close'
+      ? 'LEFT/RIGHT tabs   UP/DOWN select   E equip   M move   S sell   D dismantle   TAB trees   ESC close'
       : this.page === 'missions'
-        ? '↑ ↓ select   ENTER deploy   O outfit   TAB page   R research   P perks   ESC title'
-        : '← → tabs   ↑ ↓ select   E equip   M move   S sell   D dismantle   TAB missions   R research   P perks   ESC title';
+        ? 'UP/DOWN select   ENTER deploy   O outfit   TAB page   R research   P perks   ESC title'
+        : 'LEFT/RIGHT tabs   UP/DOWN select   E equip   M move   S sell   D dismantle   TAB missions   R research   P perks   ESC title';
     this.text(24, h - 14, hint, 12, PALETTE.textDim, [0, 1]);
     if (this.toast) this.text(w - 24, h - 14, this.toast, 13, this.toastColor, [1, 1]);
   }
@@ -570,12 +577,9 @@ export class Base extends Phaser.Scene {
     const r = this.result!;
     const g = this.gfx;
     const color = r.outcome === 'extracted' ? PALETTE.player : PALETTE.hostile;
-    g.fillStyle(color, 0.1);
-    g.fillRect(x, y, w, 40);
-    g.lineStyle(1.5, color, 0.9);
-    g.strokeRect(x, y, w, 40);
+    this.box('field', x, y, w, 42, 1, color);
     g.fillStyle(color, 1);
-    g.fillRect(x, y, 4, 40);
+    g.fillRect(x + 6, y + 6, 4, 30);
     const head = r.outcome === 'extracted' ? 'EXTRACTED' : r.outcome === 'lost' ? 'AUG LOST' : 'MISSION ABORTED';
     const bits: string[] = [];
     if (r.outcome === 'extracted') {
@@ -587,10 +591,11 @@ export class Base extends Phaser.Scene {
     }
     if (r.intel > 0) bits.push(`+${r.intel} Intel`);
     if (r.wave > 0) bits.push(`reached wave ${r.wave}`);
-    this.text(x + 16, y + 11, head, 15, color);
-    this.text(x + 16 + 130, y + 12, bits.join('   '), 13, PALETTE.text);
-    const cx = this.text(x + w - 14, y + 11, '×', 18, PALETTE.textDim, [1, 0]);
-    this.hit('result', x + w - cx.width - 24, y, cx.width + 24, 40, () => {
+    this.text(x + 22, y + 13, head, 16, color);
+    this.text(x + 22 + 170, y + 14, bits.join('   '), 12, PALETTE.text);
+    const ico = uiIcon(this, 'close', x + w - 34, y + 10).setDepth(5);
+    this.dyn.push(ico);
+    this.hit('result', x + w - 44, y, 44, 42, () => {
       this.result = null;
       this.sfx.step();
       this.render();
@@ -617,10 +622,7 @@ export class Base extends Phaser.Scene {
       const it = profile.equipped[slot];
       const on = this.slotFilter === slot;
       if (on) {
-        this.gfx.fillStyle(PALETTE.structure, 0.1);
-        this.gfx.fillRect(x + 6, cy - 6, w - 12, cardH - 2);
-        this.gfx.lineStyle(1.5, PALETTE.structure, 0.9);
-        this.gfx.strokeRect(x + 6, cy - 6, w - 12, cardH - 2);
+        this.box('btn_hover', x + 8, cy - 6, w - 16, cardH - 2, 1);
       } else {
         this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
         this.gfx.lineBetween(x + 10, cy - 4, x + w - 10, cy - 4);
@@ -648,14 +650,15 @@ export class Base extends Phaser.Scene {
     let tx = x + 14;
     for (const t of this.tabs()) {
       const on = t.id === this.tab;
-      const tt = this.text(tx, y + 13, on ? `[${t.label}]` : ` ${t.label} `, 13, on ? PALETTE.white : PALETTE.textDim);
-      this.hit(`tab:${t.id}`, tx - 4, y + 6, tt.width + 8, 28, () => this.setTab(t.id));
-      tx += tt.width + 12;
+      const tt = this.text(tx + 14, y + 17, t.label, 12, on ? PALETTE.white : PALETTE.textDim);
+      this.box(on ? 'tab_sel' : 'tab_un', tx, y + 8, tt.width + 28, on ? 32 : 28);
+      this.hit(`tab:${t.id}`, tx, y + 8, tt.width + 28, 32, () => this.setTab(t.id));
+      tx += tt.width + 36;
     }
     if (this.slotFilter) {
-      this.text(x + w - 14, y + 14, `filter: ${SLOT_LABELS[this.slotFilter]}`, 12, PALETTE.structure, [1, 0]);
+      this.text(x + w - 18, y + 16, `filter: ${SLOT_LABELS[this.slotFilter]}`, 12, PALETTE.structure, [1, 0]);
     } else if (this.tab === 'carried' && runState.carriedScrap > 0) {
-      this.text(x + w - 14, y + 14, `+${runState.carriedScrap} scrap carried`, 12, PALETTE.scrap, [1, 0]);
+      this.text(x + w - 18, y + 16, `+${runState.carriedScrap} scrap carried`, 12, PALETTE.scrap, [1, 0]);
     }
     this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
     this.gfx.lineBetween(x + 8, y + 40, x + w - 8, y + 40);
@@ -683,10 +686,7 @@ export class Base extends Phaser.Scene {
       const col = RARITY_COLORS[rarity];
       this.hit(`row:${idx}`, x + 4, ry, w - 8, ROW_H - 2, () => this.select(idx));
       if (idx === this.sel) {
-        this.gfx.fillStyle(col, 0.14);
-        this.gfx.fillRect(x + 4, ry, w - 8, ROW_H - 2);
-        this.gfx.lineStyle(1.5, 0xffffff, 0.9);
-        this.gfx.strokeRect(x + 4, ry, w - 8, ROW_H - 2);
+        this.box('btn_hover', x + 8, ry, w - 16, ROW_H - 2, 1).setDepth(0.6);
       }
       this.gfx.fillStyle(col, 1);
       this.gfx.fillRect(x + 10, ry + 6, 3, ROW_H - 14);
@@ -758,11 +758,8 @@ export class Base extends Phaser.Scene {
     let by = btnTop;
     for (const b of this.btns) {
       const on = b.enabled;
-      this.gfx.fillStyle(on ? 0x0b1f22 : 0x080e10, 1);
-      this.gfx.fillRect(x + 16, by, w - 32, bh);
-      this.gfx.lineStyle(1.5, on ? PALETTE.structure : PALETTE.textDim, on ? 0.9 : 0.4);
-      this.gfx.strokeRect(x + 16, by, w - 32, bh);
-      this.text(x + 28, by + 9, `[${b.key}]`, 13, on ? PALETTE.ammo : PALETTE.textDim);
+      this.box(on ? 'btn' : 'btn_dis', x + 16, by, w - 32, bh);
+      this.text(x + 28, by + 9, `[${b.key}]`, 12, on ? PALETTE.ammo : PALETTE.textDim);
       this.text(x + 96, by + 9, b.label, 13, on ? PALETTE.white : PALETTE.textDim);
       this.hit(`btn:${b.key}`, x + 16, by, w - 32, bh, () => (b.enabled ? b.run() : this.deny(b)), b.enabled);
       by += bh + BTN_GAP;
@@ -779,16 +776,15 @@ export class Base extends Phaser.Scene {
   private drawGunSchematic(x: number, y: number, w: number, shape: string, kit: (typeof GUN_KITS)[string], col: number): number {
     const sc = 2;
     const gw = 64 * sc;
-    const rowH = 13;
+    const rowH = 15;
     const rows: { label: string; part?: string }[] = [
       ...KIT_SLOTS.map((slot) => ({ label: slot.label, part: kit[slot.key] })),
       { label: 'MAGAZINE', part: kit.mag.part },
     ];
     const bh = rows.length * rowH + 8;
-    this.gfx.fillStyle(0x070f12, 1);
-    this.gfx.fillRect(x, y, w, bh);
-    this.gfx.lineStyle(1, col, 0.7);
-    this.gfx.strokeRect(x, y, w, bh);
+    this.box('field', x, y, w, bh, 1);
+    this.gfx.fillStyle(col, 1);
+    this.gfx.fillRect(x + 6, y + 6, 3, bh - 12);
     const ix = x + 8;
     const iy = y + (bh - 32 * sc) / 2;
     const mag = this.add.image(ix + kit.mag.x * sc, iy + kit.mag.y * sc, pixMagKey(shape)).setOrigin(0, 0).setScale(sc).setDepth(5);
@@ -797,8 +793,8 @@ export class Base extends Phaser.Scene {
     const cx = x + gw + 24;
     rows.forEach((r, i) => {
       const ry = y + 5 + i * rowH;
-      this.text(cx, ry + 2, r.label, 9, PALETTE.textDim);
-      this.text(x + w - 8, ry, r.part ? (PART_NAMES[r.part] ?? r.part) : 'none', 11, r.part ? PALETTE.text : PALETTE.textDim, [1, 0]);
+      this.text(cx, ry + 3, r.label, 8, PALETTE.textDim);
+      this.text(x + w - 8, ry, r.part ? (PART_NAMES[r.part] ?? r.part) : 'none', 12, r.part ? PALETTE.text : PALETTE.textDim, [1, 0]);
       if (i < rows.length - 1) {
         this.gfx.lineStyle(1, PALETTE.structureDim, 0.35);
         this.gfx.lineBetween(cx, ry + 12, x + w - 8, ry + 12);
@@ -818,19 +814,15 @@ export class Base extends Phaser.Scene {
       const cy = y + 40 + i * (cardH + 10);
       const on = i === this.missionSel;
       const locked = !!m.locked;
-      this.gfx.fillStyle(on ? PALETTE.structure : 0x0a1418, on ? 0.12 : 0.8);
-      this.gfx.fillRect(x + 8, cy, listW - 16, cardH);
-      this.gfx.lineStyle(on ? 2 : 1.2, on ? PALETTE.structure : PALETTE.structureDim, locked ? 0.5 : 0.95);
-      this.gfx.strokeRect(x + 8, cy, listW - 16, cardH);
+      this.box(on ? 'btn_hover' : 'field', x + 8, cy, listW - 16, cardH, locked ? 0.7 : 1);
       if (on) {
         this.gfx.fillStyle(PALETTE.structure, 1);
-        this.gfx.fillRect(x + 8, cy, 4, cardH);
+        this.gfx.fillRect(x + 14, cy + 6, 4, cardH - 12);
       }
       this.hit(`mission:${i}`, x + 8, cy, listW - 16, cardH, () => this.selectMission(i), true);
       this.text(x + 26, cy + 12, m.name, 22, locked ? PALETTE.textDim : PALETTE.white);
       this.text(x + 26, cy + 42, m.tag, 12, PALETTE.textDim);
       this.text(x + 26, cy + 64, locked ? 'LOCKED' : 'AVAILABLE', 12, locked ? PALETTE.hostile : PALETTE.player);
-      if (locked) this.text(x + listW - 26, cy + 14, '■', 16, PALETTE.textDim, [1, 0]);
     });
 
     const dx = x + listW + 20;
@@ -877,10 +869,7 @@ export class Base extends Phaser.Scene {
     const bh = 54;
     const by = y + h - bh - 22;
     this.text(dx + 22, by - 40, locked ? m.locked! : 'Carried loot is lost if you die. Extract with X to bank it.', 12, locked ? PALETTE.hostile : PALETTE.textDim).setWordWrapWidth(dw - 44);
-    this.gfx.fillStyle(locked ? 0x080e10 : 0x0e2e30, 1);
-    this.gfx.fillRect(dx + 22, by, dw - 44, bh);
-    this.gfx.lineStyle(2, locked ? PALETTE.textDim : PALETTE.structure, locked ? 0.4 : 1);
-    this.gfx.strokeRect(dx + 22, by, dw - 44, bh);
+    this.box(locked ? 'btn_dis' : 'btn_hover', dx + 22, by, dw - 44, bh);
     this.text(dx + dw / 2, by + bh / 2, locked ? 'SEALED' : 'DEPLOY  [ENTER]', 22, locked ? PALETTE.textDim : PALETTE.white, [0.5, 0.5]);
     this.hit('deploy', dx + 22, by, dw - 44, bh, () => this.deploy(), !locked);
   }

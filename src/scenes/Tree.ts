@@ -2,6 +2,7 @@
 // on a grid joined by trunk lines; small chip nodes hang under their parent.
 // Opened from the room with TAB; the room is paused underneath.
 import Phaser from 'phaser';
+import { snapFont } from '../ui/pixelUi';
 import { FONT, PALETTE, TREE_TINTS, hex } from '../data/palette';
 import {
   NODE_BY_ID,
@@ -150,8 +151,8 @@ export class Tree extends Phaser.Scene {
 
   private text(x: number, y: number, s: string, size: number, color: number): Txt {
     return this.add
-      .text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color: hex(color) })
-        .setResolution(2)
+      .text(x, y, s, { fontFamily: FONT, fontSize: `${snapFont(size)}px`, color: hex(color) })
+      .setResolution(1)
       .setOrigin(0, 0);
   }
 
@@ -243,7 +244,7 @@ export class Tree extends Phaser.Scene {
     v.icon.setAlpha(st === 'locked' ? 0.3 : st === 'poor' ? 0.7 : 1);
     v.name.setAlpha(st === 'locked' ? 0.5 : 1);
     if (st === 'owned') {
-      v.cost.setText('✓').setColor(hex(0xffffff));
+      v.cost.setText('OK').setColor(hex(0xffffff));
     } else {
       v.cost.setText(v.node.cost.toLocaleString('en-US')).setColor(hex(st === 'poor' ? PALETTE.hostile : st === 'locked' ? PALETTE.textDim : PALETTE.white));
     }
@@ -339,7 +340,7 @@ export class Tree extends Phaser.Scene {
     const x = w - pw - 20;
     const lines = n.effects.map(fmtEffect);
     this.infoTitle.setText(n.name).setColor(hex(TREE_TINTS[n.tint]));
-    this.infoBody.setText(`${n.desc}\n\n${lines.map((l) => `▸ ${l}`).join('\n')}`);
+    this.infoBody.setText(`${n.desc}\n\n${lines.map((l) => `- ${l}`).join('\n')}`);
     let status: string;
     let color: number = PALETTE.ammo;
     if (st === 'owned') {

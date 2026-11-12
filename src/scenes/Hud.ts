@@ -9,6 +9,7 @@ import { runState } from '../game/runState';
 import { clamp } from '../sim/math';
 import { GUN_KITS } from '../data/gunKits';
 import { pixGunKey, pixMagKey, pixMuzzle } from '../fx/pixGun';
+import { sizePanel, snapFont, snapText, uiIcon, uiKey, uiPanel } from '../ui/pixelUi';
 
 const FEED_LINES = 7;
 const BOLT_TRAVEL = 15; // px the bolt slides back
@@ -16,10 +17,11 @@ const MAG_DROP = 26; // px the magazine falls when released
 
 // Layout. Panels hug the screen corners with a 16px margin.
 const MARGIN = 16;
-const VIT = { w: 268, h: 132 }; // vitals + abilities, top-left
-const STA = { w: 214, h: 58 }; // wave status, top-right
-const WEP = { w: 344, h: 152 }; // weapon, bottom-right
-const SLOT = { w: 118, h: 38 };
+const VIT = { w: 304, h: 182 }; // vitals + abilities, top-left
+const STA = { w: 232, h: 72 }; // wave status, top-right
+const WEP = { w: 360, h: 168 }; // weapon, bottom-right
+const SLOT = { w: 132, h: 48 };
+const FIELD_INSET = 6; // a field's 2 px art border at the UI scale
 
 interface Casing {
   x: number;
@@ -33,15 +35,6 @@ interface Casing {
 
 type Txt = Phaser.GameObjects.Text;
 
-/** A rectangle with the corners cut at 45 degrees, to match the armour in the game. */
-function chamfer(x: number, y: number, w: number, h: number, c: number): Phaser.Math.Vector2[] {
-  return [
-    [x + c, y], [x + w - c, y], [x + w, y + c], [x + w, y + h - c],
-    [x + w - c, y + h], [x + c, y + h], [x, y + h - c], [x, y + c],
-  ].map(([px, py]) => new Phaser.Math.Vector2(px, py));
-}
-
-
 export class Hud extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image;
   private hurt!: Phaser.GameObjects.Image;
@@ -52,6 +45,16 @@ export class Hud extends Phaser.Scene {
   private magImg!: Phaser.GameObjects.Image;
   private gunFx!: Phaser.GameObjects.Graphics;
   private cross!: Phaser.GameObjects.Graphics;
+  private chromeObjs: Phaser.GameObjects.GameObject[] = [];
+  private slotPanels: Phaser.GameObjects.NineSlice[] = [];
+  private slotIcons: Phaser.GameObjects.Image[] = [];
+  private extractPanel!: Phaser.GameObjects.NineSlice;
+  private carryPanel!: Phaser.GameObjects.NineSlice;
+  private feedPanels: Phaser.GameObjects.NineSlice[] = [];
+  private arTrack!: Phaser.GameObjects.NineSlice;
+  private xhArms: Phaser.GameObjects.Image[] = [];
+  private xhDot!: Phaser.GameObjects.Image;
+  private allText: Txt[] = [];
   private shieldLabel!: Txt;
   private hullLabel!: Txt;
   private shieldNum!: Txt;
@@ -119,45 +122,58 @@ export class Hud extends Phaser.Scene {
     this.gunFx = this.add.graphics().setDepth(7);
     this.cross = this.add.graphics().setDepth(9);
 
-    const mk = (size: number, color: number, ox = 0, oy = 0, bold = false): Txt =>
-      this.add
-        .text(0, 0, '', {
-          fontFamily: FONT,
-          fontSize: `${size}px`,
-          color: hex(color),
-          fontStyle: bold ? 'bold' : 'normal',
-        })
+    // Pixel UI objects that change state, not size: pooled and shown or hidden per frame.
+    const A = T.ui.panelAlpha;
+    this.carryPanel = uiPanel(this, 'panel', 0, 0, 10, 10).setDepth(4).setAlpha(A);
+    this.extractPanel = uiPanel(this, 'btn', 0, 0, 10, 10).setDepth(7.5).setVisible(false);
+    this.arTrack = uiPanel(this, 'field', 0, 0, 10, 10).setDepth(4.9).setVisible(false);
+    for (let i = 0; i < 2; i++) {
+      this.slotPanels.push(uiPanel(this, 'btn', 0, 0, SLOT.w, SLOT.h).setDepth(4.5));
+      this.slotIcons.push(uiIcon(this, i === 0 ? 'dash' : 'blade', 0, 0).setDepth(6));
+    }
+    for (let i = 0; i < FEED_LINES; i++) this.feedPanels.push(uiPanel(this, 'panel', 0, 0, 10, 10).setDepth(4.2).setVisible(false));
+    // Crosshair: four arms and a centre ring cut from the KabGames pack, moved out with aim spread.
+    for (let i = 0; i < 4; i++) this.xhArms.push(this.add.image(0, 0, uiKey(i < 2 ? 'xh_arm_v' : 'xh_arm_h')).setScale(T.ui.crossPx).setDepth(9).setVisible(false));
+    this.xhDot = this.add.image(0, 0, uiKey('xh_dot')).setScale(T.ui.crossPx).setDepth(9).setVisible(false);
+
+    const mk = (size: number, color: number, ox = 0, oy = 0): Txt => {
+      const t = this.add
+        .text(0, 0, '', { fontFamily: FONT, fontSize: `${snapFont(size)}px`, color: hex(color) })
+        .setResolution(1)
         .setOrigin(ox, oy)
         .setDepth(6);
+      this.allText.push(t);
+      return t;
+    };
 
-    this.shieldLabel = mk(10, PALETTE.textDim);
-    this.hullLabel = mk(10, PALETTE.textDim);
-    this.shieldNum = mk(15, PALETTE.shield, 1, 0, true);
-    this.hullNum = mk(15, PALETTE.health, 1, 0, true);
-    this.waveText = mk(20, PALETTE.structure, 0, 0, true);
-    this.hostText = mk(12, PALETTE.text, 1, 0);
+    this.shieldLabel = mk(16, PALETTE.textDim);
+    this.hullLabel = mk(16, PALETTE.textDim);
+    this.shieldNum = mk(24, PALETTE.shield, 1, 0);
+    this.hullNum = mk(24, PALETTE.health, 1, 0);
+    this.waveText = mk(24, PALETTE.structure, 0, 0);
+    this.hostText = mk(16, PALETTE.text, 1, 0);
     this.subText = mk(11, PALETTE.textDim);
     this.fpsText = mk(11, PALETTE.textDim, 1, 0);
     this.helpText = mk(11, PALETTE.textDim, 1, 0).setAlign('right');
-    this.carryText = mk(13, PALETTE.text, 0.5, 1);
-    this.extractText = mk(18, PALETTE.structure, 0.5, 1).setDepth(8);
-    this.banner = mk(42, PALETTE.structure, 0.5, 0.5, true).setDepth(8);
-    this.banner.setShadow(0, 0, hex(PALETTE.structure), 14, false, true);
-    this.comboText = mk(22, PALETTE.ammo, 0.5, 0.5, true).setDepth(8);
-    this.dashName = mk(12, PALETTE.text, 0, 0, true);
-    this.bladeName = mk(12, PALETTE.text, 0, 0, true);
-    this.dashKey = mk(9, PALETTE.textDim);
-    this.bladeKey = mk(9, PALETTE.textDim);
-    this.dashTimer = mk(15, PALETTE.white, 1, 0.5, true).setDepth(7);
-    this.bladeTimer = mk(15, PALETTE.white, 1, 0.5, true).setDepth(7);
-    this.weaponName = mk(13, PALETTE.ammo, 0, 0, true);
+    this.carryText = mk(12, PALETTE.text, 0.5, 1);
+    this.extractText = mk(16, PALETTE.structure, 0.5, 0.5).setDepth(8);
+    this.banner = mk(48, PALETTE.structure, 0.5, 0.5).setDepth(8);
+    this.banner.setShadow(0, 4, '#000000', 0, false, true);
+    this.comboText = mk(24, PALETTE.ammo, 0.5, 0.5).setDepth(8);
+    this.dashName = mk(16, PALETTE.text, 0, 0);
+    this.bladeName = mk(16, PALETTE.text, 0, 0);
+    this.dashKey = mk(12, PALETTE.textDim);
+    this.bladeKey = mk(12, PALETTE.textDim);
+    this.dashTimer = mk(16, PALETTE.white, 1, 0.5).setDepth(7);
+    this.bladeTimer = mk(16, PALETTE.white, 1, 0.5).setDepth(7);
+    this.weaponName = mk(16, PALETTE.ammo, 0, 0);
     this.weaponState = mk(11, PALETTE.textDim);
-    this.magCount = mk(42, PALETTE.ammo, 1, 0, true);
-    this.magCount.setShadow(0, 0, hex(PALETTE.ammo), 10, false, true);
-    this.reserveText = mk(12, PALETTE.textDim, 1, 0);
-    this.cursorAmmo = mk(13, PALETTE.ammo, 0, 0, true);
+    this.magCount = mk(48, PALETTE.ammo, 1, 0);
+    this.magCount.setShadow(0, 4, '#000000', 0, false, true);
+    this.reserveText = mk(16, PALETTE.textDim, 1, 0);
+    this.cursorAmmo = mk(16, PALETTE.ammo, 0, 0);
     for (let i = 0; i < FEED_LINES; i++) {
-      this.feedTexts.push(mk(13, PALETTE.text, 0, 1));
+      this.feedTexts.push(mk(12, PALETTE.text, 0, 1));
     }
 
     this.setText(this.shieldLabel, 'SHIELD');
@@ -212,75 +228,67 @@ export class Hud extends Phaser.Scene {
     this.drawFeedAndBanner(w, h);
     this.drawWeaponPanel(w, h, dt);
     this.drawCrosshair();
+    for (const t of this.allText) snapText(t);
   }
 
-  /** A dark plate with a chamfered outline, a faint top sheen and bright corner brackets. */
-  private plate(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: number, accent: number): void {
-    const v = chamfer(x, y, w, h, c);
-    g.fillStyle(0x02080a, 0.74);
-    g.fillPoints(v, true);
-    g.fillStyle(0xffffff, 0.035);
-    g.fillRect(x + c, y + 1, w - 2 * c, 9);
-    g.lineStyle(1, PALETTE.structureDim, 1);
-    g.strokePoints(v, true);
-    g.lineStyle(2, accent, 0.95);
-    g.lineBetween(x + c, y, x + c + 24, y);
-    g.lineBetween(x, y + c, x, y + c + 14);
-    g.lineBetween(x + w - c, y + h, x + w - c - 24, y + h);
-    g.lineBetween(x + w, y + h - c, x + w, y + h - c - 14);
-  }
-
-  /** Static chrome, drawn once per size. */
+  /** Static chrome: the 9-slice panels and bar fields, rebuilt only when the screen size changes. */
   private drawChrome(w: number, h: number): void {
-    const g = this.chrome;
-    g.clear();
-    this.plate(g, MARGIN, MARGIN, VIT.w, VIT.h, 7, PALETTE.structure);
-    g.lineStyle(1, PALETTE.structureDim, 0.8);
-    g.lineBetween(MARGIN + 14, MARGIN + 74, MARGIN + VIT.w - 14, MARGIN + 74);
-
-    this.plate(g, w - MARGIN - STA.w, MARGIN, STA.w, STA.h, 7, PALETTE.structure);
-
+    for (const o of this.chromeObjs) o.destroy();
+    this.chromeObjs = [];
+    const A = T.ui.panelAlpha;
+    const add = (kind: 'panel' | 'field', x: number, y: number, pw: number, ph: number, a = 1): void => {
+      this.chromeObjs.push(uiPanel(this, kind, x, y, pw, ph).setDepth(kind === 'panel' ? 4 : 4.4).setAlpha(a));
+    };
+    add('panel', MARGIN, MARGIN, VIT.w, VIT.h, A);
+    add('panel', w - MARGIN - STA.w, MARGIN, STA.w, STA.h, A);
+    add('panel', w - MARGIN - WEP.w, h - MARGIN - WEP.h, WEP.w, WEP.h, A);
+    // Vitals bar fields.
+    const bx = MARGIN + 16;
+    const bw = VIT.w - 32;
+    add('field', bx, MARGIN + 38, bw, 24);
+    add('field', bx, MARGIN + 90, bw, 24);
+    // A divider under the weapon name.
     const wx = w - MARGIN - WEP.w;
     const wy = h - MARGIN - WEP.h;
-    this.plate(g, wx, wy, WEP.w, WEP.h, 9, PALETTE.ammo);
-    g.lineStyle(1, PALETTE.structureDim, 0.8);
-    g.lineBetween(wx + 14, wy + 28, wx + WEP.w - 14, wy + 28);
+    const g = this.chrome;
+    g.clear();
+    g.fillStyle(0x000000, 0.4);
+    g.fillRect(wx + 18, wy + 38, WEP.w - 36, 3);
   }
 
   // ------------------------------------------------------------------
   // Top-left: vitals and ability cooldowns
   // ------------------------------------------------------------------
 
-  /** A bar of cells. The ghost shows where the value was a moment ago. */
-  private segBar(x: number, y: number, w: number, h: number, n: number, frac: number, ghost: number, color: number, alpha = 1): void {
+  /** A pixel bar inside a field: a lagging white ghost, then the live fill with a light top edge. */
+  private pixBar(x: number, y: number, w: number, h: number, frac: number, ghost: number, color: number, alpha = 1): void {
     const g = this.bars;
-    const gap = 2;
-    const sw = (w - (n - 1) * gap) / n;
-    for (let i = 0; i < n; i++) {
-      const sx = x + i * (sw + gap);
-      g.fillStyle(0x0b1a18, 0.95);
-      g.fillRect(sx, y, sw, h);
-      const gf = clamp(ghost * n - i, 0, 1);
-      if (gf > 0) {
-        g.fillStyle(PALETTE.white, 0.55);
-        g.fillRect(sx, y, sw * gf, h);
-      }
-      const f = clamp(frac * n - i, 0, 1);
-      if (f > 0) {
-        g.fillStyle(color, alpha);
-        g.fillRect(sx, y, sw * f, h);
-        g.fillStyle(PALETTE.white, 0.2 * alpha);
-        g.fillRect(sx, y, sw * f, 2);
-      }
+    const iw = w - FIELD_INSET * 2;
+    const ih = h - FIELD_INSET * 2;
+    const fx = x + FIELD_INSET;
+    const fy = y + FIELD_INSET;
+    const gw = Math.round(iw * clamp(ghost, 0, 1));
+    const fw = Math.round(iw * clamp(frac, 0, 1));
+    if (gw > fw) {
+      g.fillStyle(PALETTE.white, 0.6);
+      g.fillRect(fx + fw, fy, gw - fw, ih);
+    }
+    if (fw > 0) {
+      g.fillStyle(color, alpha);
+      g.fillRect(fx, fy, fw, ih);
+      g.fillStyle(PALETTE.white, 0.28 * alpha);
+      g.fillRect(fx, fy, fw, 3);
+      g.fillStyle(0x000000, 0.22 * alpha);
+      g.fillRect(fx, fy + ih - 3, fw, 3);
     }
   }
 
   private drawVitals(dt: number): void {
     const s = runState;
     const g = this.bars;
-    const x = MARGIN + 14;
+    const x = MARGIN + 16;
     const y = MARGIN;
-    const bw = VIT.w - 28;
+    const bw = VIT.w - 32;
 
     const shF = clamp(s.shield / s.maxShield, 0, 1);
     const hpF = clamp(s.hp / s.maxHp, 0, 1);
@@ -301,79 +309,55 @@ export class Hud extends Phaser.Scene {
 
     const lowHull = hpF < 0.3;
     const pulse = lowHull ? 0.7 + 0.3 * Math.sin(this.clock * 9) : 1;
-    this.shieldLabel.setPosition(x, y + 11);
-    this.hullLabel.setPosition(x, y + 43);
+    this.shieldLabel.setPosition(x, y + 15);
+    this.hullLabel.setPosition(x, y + 66);
     this.setText(this.shieldNum, String(Math.floor(s.shield)));
     this.setText(this.hullNum, String(Math.ceil(Math.max(0, s.hp))));
-    this.shieldNum.setPosition(x + bw, y + 8);
-    this.hullNum.setColor(hex(lowHull ? PALETTE.healthLow : PALETTE.health)).setPosition(x + bw, y + 40);
-    this.segBar(x, y + 26, bw, 9, 20, shF, this.ghostSh, PALETTE.shield);
-    this.segBar(x, y + 58, bw, 9, 20, hpF, this.ghostHp, lowHull ? PALETTE.healthLow : PALETTE.health, pulse);
+    this.shieldNum.setPosition(x + bw, y + 9);
+    this.hullNum.setColor(hex(lowHull ? PALETTE.healthLow : PALETTE.health)).setPosition(x + bw, y + 61);
+    this.pixBar(x, y + 38, bw, 24, shF, this.ghostSh, PALETTE.shield);
+    this.pixBar(x, y + 90, bw, 24, hpF, this.ghostHp, lowHull ? PALETTE.healthLow : PALETTE.health, pulse);
 
     if (s.refundFlash > 0) {
-      g.lineStyle(2, PALETTE.white, s.refundFlash);
-      g.strokePoints(chamfer(MARGIN - 2, MARGIN - 2, VIT.w + 4, VIT.h + 4, 8), true);
+      g.lineStyle(3, PALETTE.white, s.refundFlash);
+      g.strokeRect(MARGIN - 3, MARGIN - 3, VIT.w + 6, VIT.h + 6);
     }
 
-    const sy = y + 82;
-    this.slot(x, sy, s.dashReady, s.dashPing, s.dashDeny, PALETTE.structure, 'dash');
-    this.slot(x + SLOT.w + 8, sy, s.bladeReady, s.bladePing, s.bladeDeny, PALETTE.white, 'blade');
+    const sy = y + 122;
+    this.slot(0, x, sy, s.dashReady, s.dashPing, s.dashDeny, PALETTE.structure);
+    this.slot(1, x + SLOT.w + 8, sy, s.bladeReady, s.bladePing, s.bladeDeny, PALETTE.white);
     const dashLeft = (1 - s.dashReady) * T.player.dashCooldown;
     const bladeLeft = (1 - s.bladeReady) * T.sword.cooldown;
-    this.dashName.setPosition(x + 38, sy + 6);
-    this.dashKey.setPosition(x + 38, sy + 23);
-    this.bladeName.setPosition(x + SLOT.w + 8 + 38, sy + 6);
-    this.bladeKey.setPosition(x + SLOT.w + 8 + 38, sy + 23);
+    this.dashName.setPosition(x + 40, sy + 7);
+    this.dashKey.setPosition(x + 40, sy + 27);
+    this.bladeName.setPosition(x + SLOT.w + 8 + 40, sy + 7);
+    this.bladeKey.setPosition(x + SLOT.w + 8 + 40, sy + 27);
     this.setText(this.dashTimer, dashLeft > 0.05 ? dashLeft.toFixed(1) : '');
     this.setText(this.bladeTimer, bladeLeft > 0.05 ? bladeLeft.toFixed(1) : '');
-    this.dashTimer.setPosition(x + SLOT.w - 8, sy + SLOT.h / 2 + 8);
-    this.bladeTimer.setPosition(x + 2 * SLOT.w + 8 - 8, sy + SLOT.h / 2 + 8);
+    this.dashTimer.setPosition(x + SLOT.w - 10, sy + SLOT.h / 2);
+    this.bladeTimer.setPosition(x + 2 * SLOT.w + 8 - 10, sy + SLOT.h / 2);
   }
 
-  /** A cooldown slot: fills left to right as it recharges, rings white when it comes back. */
-  private slot(x: number, y: number, ready: number, ping: number, deny: number, color: number, icon: 'dash' | 'blade'): void {
+  /** A cooldown button: fills left to right as it recharges, flashes white when it comes back. */
+  private slot(i: number, x: number, y: number, ready: number, ping: number, deny: number, color: number): void {
     const g = this.bars;
     const { w, h } = SLOT;
     const isReady = ready >= 1;
-    const v = chamfer(x, y, w, h, 6);
-    g.fillStyle(0x010607, 0.85);
-    g.fillPoints(v, true);
-    g.fillStyle(color, isReady ? 0.18 : 0.3);
-    g.fillRect(x + 1, y + 6, (w - 2) * clamp(ready, 0, 1), h - 12);
+    this.slotPanels[i].setTexture(uiKey(isReady ? 'wns_btn' : 'wns_btn_dis')).setPosition(x, y);
+    this.slotIcons[i].setPosition(x + 10, y + 13).setTint(isReady ? color : 0x6f7a7e);
+    if (!isReady) {
+      g.fillStyle(color, 0.3);
+      g.fillRect(x + FIELD_INSET, y + FIELD_INSET, Math.round((w - FIELD_INSET * 2) * clamp(ready, 0, 1)), h - FIELD_INSET * 2);
+    }
     if (deny > 0) {
       g.fillStyle(PALETTE.hostile, deny * 0.45);
-      g.fillPoints(v, true);
+      g.fillRect(x + FIELD_INSET, y + FIELD_INSET, w - FIELD_INSET * 2, h - FIELD_INSET * 2);
     }
-    g.lineStyle(isReady ? 2 : 1, deny > 0 ? PALETTE.hostile : isReady ? color : PALETTE.textDim, 1);
-    g.strokePoints(v, true);
-
-    // Icon.
-    const ic = isReady ? color : PALETTE.textDim;
-    const ix = x + 9;
-    const iy = y + 9;
-    g.lineStyle(2.4, ic, 1);
-    if (icon === 'dash') {
-      for (let i = 0; i < 3; i++) {
-        const cx = ix + i * 7;
-        g.lineBetween(cx, iy, cx + 6, iy + 10);
-        g.lineBetween(cx + 6, iy + 10, cx, iy + 20);
-      }
-    } else {
-      g.lineStyle(3, ic, 1);
-      g.lineBetween(ix + 2, iy + 20, ix + 22, iy);
-      g.lineStyle(2, ic, 1);
-      g.lineBetween(ix + 5, iy + 11, ix + 11, iy + 17);
-      g.lineStyle(1, ic, 0.6);
-      g.beginPath();
-      g.arc(ix + 2, iy + 20, 14, -Math.PI * 0.42, -Math.PI * 0.05, false);
-      g.strokePath();
-    }
-
     if (ping > 0) {
       g.fillStyle(PALETTE.white, ping * 0.3);
-      g.fillPoints(v, true);
+      g.fillRect(x + FIELD_INSET, y + FIELD_INSET, w - FIELD_INSET * 2, h - FIELD_INSET * 2);
       g.lineStyle(3, PALETTE.white, ping);
-      g.strokePoints(chamfer(x - 3, y - 3, w + 6, h + 6, 8), true);
+      g.strokeRect(x - 3, y - 3, w + 6, h + 6);
     }
   }
 
@@ -385,34 +369,33 @@ export class Hud extends Phaser.Scene {
     const s = runState;
     const x = w - MARGIN - STA.w;
     this.setText(this.waveText, s.wave === 0 ? 'WAVE -' : `WAVE ${s.wave}`);
-    this.waveText.setPosition(x + 14, MARGIN + 7);
+    this.waveText.setPosition(x + 18, MARGIN + 12);
     this.setText(this.hostText, `${s.mobsAlive} HOSTILE${s.mobsAlive === 1 ? '' : 'S'}`);
-    this.hostText.setColor(hex(s.mobsAlive > 0 ? PALETTE.hostile : PALETTE.textDim)).setPosition(x + STA.w - 14, MARGIN + 12);
+    this.hostText.setColor(hex(s.mobsAlive > 0 ? PALETTE.hostile : PALETTE.textDim)).setPosition(x + STA.w - 18, MARGIN + 18);
     this.setText(this.subText, s.intermission > 0 ? `NEXT WAVE ${s.intermission.toFixed(1)}s` : s.mobsAlive > 0 ? 'ENGAGED' : 'CLEAR');
-    this.subText.setPosition(x + 14, MARGIN + 36);
+    this.subText.setPosition(x + 18, MARGIN + 46);
     this.setText(this.fpsText, `${Math.round(this.game.loop.actualFps)} FPS${s.muted ? '  MUTED' : ''}`);
-    this.fpsText.setPosition(x + STA.w - 14, MARGIN + 36);
+    this.fpsText.setPosition(x + STA.w - 18, MARGIN + 46);
     this.helpText.setVisible(s.showHelp).setPosition(w - MARGIN, MARGIN + STA.h + 10);
   }
 
   /** The pad prompt, above the status line, only while standing on a pad. */
-  private drawExtractPrompt(w: number, h: number): void {
+  private drawExtractPrompt(w: number, aboveY: number): void {
     const s = runState;
-    const g = this.bars;
     if (!s.extractPrompt) {
       this.extractText.setVisible(false);
+      this.extractPanel.setVisible(false);
       return;
     }
-    const col = s.extractOpen ? PALETTE.structure : PALETTE.hostile;
     this.setText(this.extractText, s.extractPrompt);
-    this.extractText.setColor(hex(col)).setVisible(true).setPosition(w / 2, h - MARGIN - 44);
-    this.extractText.setShadow(0, 0, hex(col), 12, false, true);
-    const pw = this.extractText.width + 40;
-    const ph = this.extractText.height + 12;
-    g.fillStyle(0x02080a, 0.75);
-    g.fillPoints(chamfer(w / 2 - pw / 2, h - MARGIN - 44 - ph + 6, pw, ph, 6), true);
-    g.lineStyle(1.5, col, 0.9);
-    g.strokePoints(chamfer(w / 2 - pw / 2, h - MARGIN - 44 - ph + 6, pw, ph, 6), true);
+    const pw = this.extractText.width + 56;
+    const ph = this.extractText.height + 26;
+    const py = aboveY - ph;
+    sizePanel(this.extractPanel, Math.round(w / 2 - pw / 2), py, pw, ph);
+    if (s.extractOpen) this.extractPanel.clearTint();
+    else this.extractPanel.setTint(0xff7a6e);
+    this.extractPanel.setVisible(true);
+    this.extractText.setColor(hex(s.extractOpen ? PALETTE.structure : PALETTE.hostile)).setVisible(true).setPosition(w / 2, py + ph / 2);
   }
 
   private drawFeedAndBanner(w: number, h: number): void {
@@ -422,31 +405,32 @@ export class Hud extends Phaser.Scene {
       this.carryText,
       `CARRIED ${s.carried.length}/${profile.stats.carrySlots}${s.carriedScrap > 0 ? `  +${s.carriedScrap} scrap` : ''}   SCRAP ${profile.scrap}   INTEL ${profile.intel}   X extract at a pad${runState.devMode ? '   [B] base   [TAB] trees' : '   [ESC] pause'}`,
     );
-    this.drawExtractPrompt(w, h);
-    this.carryText.setPosition(w / 2, h - MARGIN);
-    const cw = this.carryText.width + 28;
-    const ch = this.carryText.height + 8;
-    g.fillStyle(0x02080a, 0.6);
-    g.fillPoints(chamfer(w / 2 - cw / 2, h - MARGIN - ch + 4, cw, ch, 5), true);
-    g.lineStyle(1, PALETTE.structureDim, 1);
-    g.strokePoints(chamfer(w / 2 - cw / 2, h - MARGIN - ch + 4, cw, ch, 5), true);
+    const cw = this.carryText.width + 36;
+    const ch = this.carryText.height + 18;
+    const cy = h - MARGIN - ch;
+    sizePanel(this.carryPanel, Math.round(w / 2 - cw / 2), cy, cw, ch);
+    this.carryText.setPosition(w / 2, cy + ch / 2 + this.carryText.height / 2);
+    this.drawExtractPrompt(w, cy - 10);
 
     for (let i = 0; i < FEED_LINES; i++) {
       const t = this.feedTexts[i];
+      const pan = this.feedPanels[i];
       const line = s.feed[s.feed.length - 1 - i];
       if (!line) {
         t.setVisible(false);
+        pan.setVisible(false);
         continue;
       }
       const fade = 1 - clamp((line.age - (T.loot.feedSeconds - 1.2)) / 1.2, 0, 1);
       this.setText(t, line.text);
-      const ty = h - 56 - i * 24;
-      t.setColor(hex(line.color)).setAlpha(fade).setVisible(true).setPosition(MARGIN + 14, ty);
-      // Plate with a rarity-coloured tick.
-      g.fillStyle(0x02080a, 0.6 * fade);
-      g.fillRect(MARGIN, ty - 19, t.width + 28, 22);
+      const ph = 30;
+      const py = h - 150 - i * (ph + 4);
+      sizePanel(pan, MARGIN, py, t.width + 40, ph);
+      pan.setAlpha(fade).setVisible(true);
+      t.setColor(hex(line.color)).setAlpha(fade).setVisible(true).setPosition(MARGIN + 22, py + ph - 8);
+      // Rarity-coloured tick inside the panel edge.
       g.fillStyle(line.color, 0.95 * fade);
-      g.fillRect(MARGIN, ty - 19, 3, 22);
+      g.fillRect(MARGIN + 8, py + 8, 3, ph - 16);
     }
 
     if (s.bannerTime > 0) {
@@ -460,20 +444,19 @@ export class Hud extends Phaser.Scene {
         .setAlpha(a)
         .setPosition(w / 2, by)
         .setVisible(true);
-      this.banner.setShadow(0, 0, hex(col), 14, false, true);
       const half = this.banner.width / 2;
-      g.lineStyle(2, col, a * 0.85);
-      g.lineBetween(w / 2 - half - 110, by, w / 2 - half - 20, by);
-      g.lineBetween(w / 2 + half + 20, by, w / 2 + half + 110, by);
-      g.lineStyle(1, col, a * 0.5);
-      g.lineBetween(w / 2 - half - 90, by + 8, w / 2 - half - 20, by + 8);
-      g.lineBetween(w / 2 + half + 20, by + 8, w / 2 + half + 90, by + 8);
+      g.fillStyle(col, a * 0.85);
+      g.fillRect(w / 2 - half - 130, by - 2, 110, 4);
+      g.fillRect(w / 2 + half + 20, by - 2, 110, 4);
+      g.fillStyle(col, a * 0.5);
+      g.fillRect(w / 2 - half - 100, by + 8, 80, 2);
+      g.fillRect(w / 2 + half + 20, by + 8, 80, 2);
     } else {
       this.banner.setVisible(false);
     }
     if (s.combo >= 2) {
       this.setText(this.comboText, `x${s.combo}`);
-      this.comboText.setPosition(w / 2, h * 0.2 + 44).setVisible(true);
+      this.comboText.setPosition(w / 2, h * 0.2 + 48).setVisible(true);
     } else {
       this.comboText.setVisible(false);
     }
@@ -491,8 +474,8 @@ export class Hud extends Phaser.Scene {
 
     const x0 = w - MARGIN - WEP.w;
     const y0 = h - MARGIN - WEP.h;
-    const gx = x0 + 18; // gun origin: stock end
-    const gy = y0 + 62; // gun centre line
+    const gx = x0 + 24; // gun origin: stock end
+    const gy = y0 + 70; // gun centre line
 
     // React to shots fired since last frame.
     if (s.shotSeq !== this.lastShotSeq) {
@@ -545,10 +528,10 @@ export class Hud extends Phaser.Scene {
     const total = s.magSize;
     const loaded = this.pipsLoaded(p, s.mag, s.reserve, total, seat);
     const low = s.mag <= Math.ceil(total * 0.2);
-    const px0 = x0 + 14;
-    const py = y0 + WEP.h - 26;
+    const px0 = x0 + 18;
+    const py = y0 + WEP.h - 34;
     const gap = 2;
-    const pw = (WEP.w - 28 - (total - 1) * gap) / total;
+    const pw = (WEP.w - 36 - (total - 1) * gap) / total;
     for (let i = 0; i < total; i++) {
       const x = px0 + i * (pw + gap);
       if (i < loaded) {
@@ -568,7 +551,7 @@ export class Hud extends Phaser.Scene {
       }
     }
 
-    this.drawActiveReloadBar(x0, y0 - 30, WEP.w, reloading, p);
+    this.drawActiveReloadBar(x0, y0 - 34, WEP.w, reloading, p);
 
     // Numbers and status.
     const noAmmo = s.mag < 1 && s.reserve < 1 && !reloading;
@@ -596,16 +579,15 @@ export class Hud extends Phaser.Scene {
       state = 'LOW  [R] RELOAD';
       stateColor = PALETTE.healthLow;
     }
-    this.weaponName.setPosition(x0 + 14, y0 + 8);
+    this.weaponName.setPosition(x0 + 18, y0 + 14);
     this.setText(this.weaponState, state);
-    this.weaponState.setColor(hex(stateColor)).setPosition(x0 + 14 + this.weaponName.width + 12, y0 + 10);
+    this.weaponState.setColor(hex(stateColor)).setPosition(x0 + 18 + this.weaponName.width + 14, y0 + 18);
 
     const magCol = s.mag < 1 || low ? PALETTE.healthLow : reloading ? PALETTE.textDim : PALETTE.ammo;
     this.setText(this.magCount, String(s.mag));
-    this.magCount.setColor(hex(magCol)).setPosition(x0 + WEP.w - 14, y0 + 34);
-    this.magCount.setShadow(0, 0, hex(magCol), reloading ? 0 : 10, false, true);
+    this.magCount.setColor(hex(magCol)).setPosition(x0 + WEP.w - 18, y0 + 46);
     this.setText(this.reserveText, `RESERVE ${Math.floor(s.reserve)}`);
-    this.reserveText.setPosition(x0 + WEP.w - 14, y0 + 84);
+    this.reserveText.setPosition(x0 + WEP.w - 18, y0 + 98);
   }
 
   /**
@@ -619,17 +601,22 @@ export class Hud extends Phaser.Scene {
     const g = this.panel;
     const result = s.activeResult;
     const after = !reloading && s.activeFlash > 0 && result !== '';
-    if (!reloading && !after) return;
+    if (!reloading && !after) {
+      this.arTrack.setVisible(false);
+      return;
+    }
     const bx = x + 14;
     const bw = w - 28;
-    const bh = 14;
+    const bh = 16;
     const fade = reloading ? 1 : clamp(s.activeFlash / 0.35, 0, 1);
     const jam = result === 'fumble';
 
-    // Track.
-    g.fillStyle(0x000000, 0.75 * fade);
-    g.fillRect(bx - 3, y - 3, bw + 6, bh + 6);
-    g.fillStyle(jam ? 0x3a0d0d : 0x15201f, 1 * fade);
+    // Track: a pixel field, with the zones and the tick drawn over it.
+    sizePanel(this.arTrack, bx - FIELD_INSET, y - FIELD_INSET, bw + FIELD_INSET * 2, bh + FIELD_INSET * 2);
+    this.arTrack.setAlpha(fade).setVisible(true);
+    if (jam) this.arTrack.setTint(0xff7a6e);
+    else this.arTrack.clearTint();
+    g.fillStyle(jam ? 0x3a0d0d : 0x0e1514, 0.85 * fade);
     g.fillRect(bx, y, bw, bh);
 
     // Zones (hidden after a miss, like the action jamming shut).
@@ -768,25 +755,28 @@ export class Hud extends Phaser.Scene {
       if (p.x === 0 && p.y === 0) {
         this.cursorAmmo.setText('');
         this.textCache.delete(this.cursorAmmo);
+        for (const o of [...this.xhArms, this.xhDot]) o.setVisible(false);
         return;
       }
       this.pointerSeen = true;
+      for (const o of [...this.xhArms, this.xhDot]) o.setVisible(true);
     }
-    const gap = 6 + s.aimSpread * 2.6;
-    const len = 8;
+    const gap = Math.round(T.ui.crossGap + s.aimSpread * T.ui.crossSpread);
+    const len = 10 * T.ui.crossPx;
     const reloading = s.reload >= 0;
     const col = s.dryFlash > 0 ? PALETTE.hostile : reloading ? PALETTE.ammo : PALETTE.player;
-    g.lineStyle(2, col, 0.95);
-    g.lineBetween(p.x - gap - len, p.y, p.x - gap, p.y);
-    g.lineBetween(p.x + gap, p.y, p.x + gap + len, p.y);
-    g.lineBetween(p.x, p.y - gap - len, p.x, p.y - gap);
-    g.lineBetween(p.x, p.y + gap, p.x, p.y + gap + len);
-    g.fillStyle(col, 0.9);
-    g.fillCircle(p.x, p.y, 1.6);
+    const cx = Math.round(p.x);
+    const cy = Math.round(p.y);
+    const [up, down, left, right] = this.xhArms;
+    up.setOrigin(0.5, 1).setPosition(cx, cy - gap).setTint(col);
+    down.setOrigin(0.5, 0).setFlipY(true).setPosition(cx, cy + gap).setTint(col);
+    left.setOrigin(1, 0.5).setPosition(cx - gap, cy).setTint(col);
+    right.setOrigin(0, 0.5).setFlipX(true).setPosition(cx + gap, cy).setTint(col);
+    this.xhDot.setPosition(cx, cy).setTint(col);
 
     // Reload progress sweeps around the cursor, where your eyes already are.
     if (reloading) {
-      const r = gap + len + 8;
+      const r = gap + len + 10;
       const a0 = -Math.PI / 2;
       g.lineStyle(2, 0x000000, 0.45);
       g.strokeCircle(p.x, p.y, r);
@@ -797,7 +787,7 @@ export class Hud extends Phaser.Scene {
     }
     if (s.activeFlash > 0 && s.activeResult) {
       const res = s.activeResult;
-      const r = gap + len + 8 + (1 - s.activeFlash) * (res === 'perfect' ? 30 : 18);
+      const r = gap + len + 10 + (1 - s.activeFlash) * (res === 'perfect' ? 30 : 18);
       g.lineStyle(res === 'perfect' ? 4 : 3, res === 'perfect' ? PALETTE.white : res === 'good' ? PALETTE.player : PALETTE.healthLow, s.activeFlash);
       g.strokeCircle(p.x, p.y, r);
     }
@@ -819,6 +809,6 @@ export class Hud extends Phaser.Scene {
     this.setText(this.cursorAmmo, reloading ? '' : String(s.mag));
     this.cursorAmmo
       .setColor(hex(low ? PALETTE.healthLow : PALETTE.ammo))
-      .setPosition(p.x + gap + len + 6, p.y + gap + len - 4);
+      .setPosition(cx + gap + len + 8, cy + gap + len - 4);
   }
 }

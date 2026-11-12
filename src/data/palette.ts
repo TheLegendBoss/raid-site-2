@@ -18,7 +18,7 @@ export const PALETTE = {
   healthLow: 0xff5a4d,
   ammo: 0xffd36b,
   text: 0xc2cfcb,
-  textDim: 0x5d6c69,
+  textDim: 0x8d9c99,
 } as const;
 
 // Rarity ladder, index 0..6. Matches RARITY_LABELS in data/loot.ts.
@@ -32,7 +32,7 @@ export const RARITY_COLORS: readonly number[] = [
   0xbffcff, // aercho
 ];
 
-export const FONT = '"Space Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+export const FONT = '"Poco", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 export function hex(n: number): string {
   return '#' + n.toString(16).padStart(6, '0');

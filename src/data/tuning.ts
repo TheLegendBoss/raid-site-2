@@ -44,6 +44,16 @@ export const TUNING = {
     swordRestRot: -0.21, // radians: blade held forward, angled slightly out, pointing at the enemy
   },
 
+  /** Pixel UI (Waste No Space panels, Poco font, Mystery Attic icons, KabGames crosshair). `px` is the screen pixels per art pixel; `fontSizes` are the sizes Poco stays crisp at. */
+  ui: {
+    panelAlpha: 0.94,
+    px: 3,
+    iconPx: 2,
+    fontSizes: [8, 12, 16, 24, 32, 48, 64, 96],
+    crossPx: 2,
+    crossGap: 8, // px between the cursor and the inner end of each crosshair arm at zero spread
+    crossSpread: 2.6, // extra px of gap per degree of aim spread
+  },
   /** The pixel weapon in the HUD panel: sprite scale, offset from the panel's gun origin, recoil px per bolt px, rearward px per px dropped for raked magazines (1 / MAG_RAKE_ROWS in art/pixparts/parts.py). */
   pixGun: { scale: 3, x: 4, y: -42, kick: 0.5, magRake: 0.25 },
   gun: {
