@@ -113,13 +113,30 @@ Enough variety that choosing matters. About 14 base items.
 - Item base stats and tier multipliers are data in `src/data/items.ts`.
 - `src/sim/stats.ts` (pure TypeScript) resolves equipped items into one `EffectiveStats` object. Combat code reads that object and never reads `TUNING.gun` directly, so every existing tuning number becomes the "base" a gear stat modifies.
 - Weapons carry a `fire` definition (pellets, spread, burst, pierce) rather than hard-coded behaviour.
+- Every weapon has a `family` (smg, shotgun, marksman, pistol, burst, and the blade types). Mods have a slot type and either a family or `universal`.
+
+### 5.5 Finding weapons, researching mods, building parts (decided)
+
+**Weapons are found, not unlocked.** They drop from enemies, containers, Wardens and vault rewards. The quartermaster keeps selling only baseline common and uncommon weapons, so there is always something to research. Rarity stays the stat tier and signature trait (5.2).
+
+**Mods are researched and built.**
+- Each weapon family has a node in the **Armoury tree**, with mod chips beneath it (barrel, magazine, grip or optic: 2 to 3 slots per weapon, so builds stay readable).
+- **Universal techs** unlock a part type for every family at once. Example: *Extended Magazine* researched once lets every weapon take an extended mag. They sit on their own trunk of the Armoury tree and are the broad, cheaper upgrades; family chips are the specific, stronger ones.
+- **Intel researches** a mod (unlocks its blueprint). **Scrap builds** copies at the base. Built parts are stash items, fitted into slots and swappable between weapons the part fits. Fitted parts survive death like other equipped gear.
+- A family node appears in the Armoury, as a silhouette, the first time you find a weapon of that family. It becomes researchable once you have analysed one.
+
+**Dismantling.** Any weapon can always be dismantled, at any rarity, never gated. The weapon is consumed. Its **Intel payout and analysis progress count only once it is back at the base**: you carry it out and dismantle it there. A weapon lost on a run gave you nothing, so extraction stays the tension point.
+- Each dismantled weapon adds **analysis progress** to its family, which lowers the Intel cost of that family's mod chips (cap about 40%, to tune in `src/data/`). Duplicates therefore stay useful, and a good drop is still worth keeping rather than stripping.
+- Reading assumed here: dismantling happens at the base on extracted items. Dismantling in the field is out of scope unless we decide otherwise.
+
+**Currencies.** Intel = knowledge (research, mod blueprints, perks). Scrap = manufacturing (building parts, buying baseline gear, stash space).
 
 ## 6. Economy and base
 
-- **Scrap** is the only currency. It drops from enemies and containers, and every item sells for scrap by rarity.
+- **Scrap** is the manufacturing currency (build parts, buy baseline gear, stash space). It drops from enemies and containers, and items sell for scrap by rarity. **Intel** is the knowledge currency (6b). Weapons can also be dismantled for Intel (5.5).
 - **Quartermaster** buys and sells only. It sells common and uncommon gear at fair prices, and a few rare items at steep prices, with stock that refreshes after each run. Epic and above are **never** sold. They come from silos, Wardens and vaults, so drops stay exciting. (Decided: no rerolls or upgrades in the MVP.)
 - **Stash:** 60 slots, saved to a real file on desktop (`%APPDATA%\\RAID SITE 2\\save.json`, previous copy kept as `save.bak`), versioned.
-- **Costs:** respawn is free. The sinks for scrap are buying gear and expanding stash slots.
+- **Costs:** respawn is free. The sinks for scrap are building mods, buying baseline gear and expanding stash slots.
 - **Selling** at the base only. No selling in the field.
 - **Base growth** (post-MVP): population from claimed vaults unlocks new facilities.
 
@@ -130,14 +147,14 @@ Modelled on the aircraft tree in a flight-combat game: one big pannable graph pe
 | Tree | Spends | What it is | Status |
 |---|---|---|---|
 | **Research** | Intel | The programme: carry racks, ammo looms, Intel yield, shield cells and regen. Later also base facilities (stash size, quartermaster stock, research lab, clone vat) | **Live** |
-| **Perks** | Intel | Aug training: hull, mobility, gun handling, blade. Shared by every Aug, so it survives death | **Live** |
-| **Armoury** | Scrap | Gear lines (guns, blades, armour, packs). A main node unlocks an item for the quartermaster and shows how many you own (the "x1" on a flight-tree aircraft). Chips under it are fixed signature traits | Next, with items and the quartermaster |
+| **Perks** | Intel | Aug training. **Placeholder**: today's flat bonuses (hull, dash, gun, blade) stand in until the perk design discussion; the intent is build-defining perks (section 12) | Live, to be redesigned |
+| **Armoury** | Intel to research, Scrap to build | One main node per weapon family (appears once you find one), mod chips beneath, plus a universal-tech trunk whose parts fit every family. The main node shows how many of that weapon you own (the "x1" on a flight-tree aircraft). Details in 5.5 | Next, with items and the base |
 
 - **Intel** is earned by clearing waves in the feel-test room (10 + 5 per wave, scaled by the Intel Gained stat). In silos it comes from clearing rooms, terminals and Wardens. **Scrap** stays the gear currency (section 6).
 - A node does one or two plain things (flat or percent changes to a stat). No hidden mechanics, so a tree can be read at a glance.
 - Data lives in `src/data/tree.ts`; unlock rules in `src/sim/tree.ts`; resolved numbers in `src/sim/stats.ts` (`EffectiveStats`); the screen is `src/scenes/Tree.ts`. Tab opens it from the room. In the base it becomes a facility.
 - Research is the **programme's** knowledge and perks are the **Augs'** training. Both persist when an Aug dies, which matches the setting: the Augs are disposable, the programme is not.
-- **Open for the owner:** should a few perks be exclusive picks (choose one of two chips) so builds differ, or should everything be buyable eventually? Currently everything is buyable.
+- Perks are being redesigned as **build-defining** (decided); until that discussion, do not build on the current perk nodes.
 
 ## 7. Silos: floors and rooms
 
@@ -217,5 +234,8 @@ Vaults, lockdown points, population and base growth, the finite Aug pool, clonin
 4. How many floors does the introductory vault have, and what happened to the first three connected vaults?
 5. Terminology: "Aug" is the player's character, and "clone" returns later as a research unlock. Should the in-game "CLONE LOST" banner and the docs move to "Aug"?
 6. Keep the Neo Zero tileset out of the repo permanently, or decide later? (Currently out.)
+
+7. **Perk design (needs a longer discussion).** Build-defining perks are decided. Still open: do perks belong to the programme or to each Aug (and does a dead Aug take its build with it)? Are builds chosen once (a class or doctrine) or assembled from exclusive picks as you rank up? How many active build slots? Do perks change what the weapons and blade *do* (new behaviours) rather than add numbers? How does the Aug pool (question 1) feed in? Respec: free, costly or never?
+8. Armoury numbers to tune: mod slots per weapon (2 or 3), analysis-progress cap (about 40%), Intel payout per rarity, universal-tech list.
 
 *Resolved:* vaults are generated once per save with authored story rooms placed in them (confirmed). The rest of the team is background only.
