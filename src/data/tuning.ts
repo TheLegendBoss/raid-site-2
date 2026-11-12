@@ -38,9 +38,10 @@ export const TUNING = {
     recoil: 3.4, // px the carbine and helmet snap back per shot
     recoilRecover: 34,
     dashStretch: 1.12,
-    handX: 16.2, // left fist, in px from the clone's centre (art/clone.vx.js)
-    handY: -17.3,
-    swordRestRot: 3.4, // radians: reverse grip, blade carried back and out along the left side
+    armsOriginX: 32 / 72, // the arms canvas is 72 wide so the arm and gun can reach out
+    handX: 20.2, // left fist, in px from the clone's centre (art/clone.vx.js)
+    handY: -16.5,
+    swordRestRot: -0.21, // radians: blade held forward, angled slightly out, pointing at the enemy
   },
 
   gun: {
@@ -61,7 +62,8 @@ export const TUNING = {
     recoilImpulse: 38,
     cameraKick: 3.2, // px opposite the aim per shot
     shotTrauma: 0.045,
-    muzzleOffset: 31, // matches the carbine tip in art/clone.vx.js
+    muzzleOffset: 38.5, // forward of the clone's centre; matches the SMG muzzle in art/clone.vx.js
+    muzzleSide: 11.5, // to the clone's right: the arm is held straight out, so bullets leave from the gun and converge on the cursor
   },
 
   sword: {

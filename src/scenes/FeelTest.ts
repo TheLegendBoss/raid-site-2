@@ -681,9 +681,15 @@ export class FeelTest extends Phaser.Scene {
     s.shotSeq += 1;
     this.fireCd = G.fireDelay;
     const cone = (G.spread + this.bloom) * DEG;
-    const a = this.aim + (Math.random() - 0.5) * 2 * cone;
-    const mx = this.px + Math.cos(this.aim) * G.muzzleOffset;
-    const my = this.py + Math.sin(this.aim) * G.muzzleOffset;
+    // The gun is held straight out on the clone's right, so it fires from the muzzle and converges on the cursor.
+    const ca = Math.cos(this.aim);
+    const sa = Math.sin(this.aim);
+    const mx = this.px + ca * G.muzzleOffset - sa * G.muzzleSide;
+    const my = this.py + sa * G.muzzleOffset + ca * G.muzzleSide;
+    const toCursor = Math.hypot(this.mouseX - mx, this.mouseY - my) > 90
+      ? Math.atan2(this.mouseY - my, this.mouseX - mx)
+      : this.aim;
+    const a = toCursor + (Math.random() - 0.5) * 2 * cone;
     const dmg = rollDamage(this.rng, G.damage, G.damageVariance);
     this.fireBullet(mx, my, a, G.bulletSpeed, dmg, true, G.bulletLife, 0xe9fff6, 28, 2.6);
     this.bloom = Math.min(5.5, this.bloom + 0.9);
@@ -691,14 +697,14 @@ export class FeelTest extends Phaser.Scene {
 
     // Juice: flash, light, casing, recoil, kick, noise.
     this.particles.emit({
-      x: mx, y: my, vx: 0, vy: 0, life: 0.045, w: 40, h: 6, rot: this.aim,
+      x: mx, y: my, vx: 0, vy: 0, life: 0.045, w: 40, h: 6, rot: toCursor,
       color: PALETTE.muzzle, add: true,
     });
     this.glowAt(mx, my, PALETTE.muzzle, 1.5, 0.8, 0.075, 0.85);
     this.glowAt(this.px, this.py, PALETTE.muzzle, 4.2, 3.2, 0.09, 0.14);
     const eject = this.aim + Math.PI / 2 + (Math.random() - 0.5) * 0.8;
     this.particles.emit({
-      x: this.px + Math.cos(this.aim) * 8, y: this.py + Math.sin(this.aim) * 8,
+      x: this.px + ca * 26 - sa * (G.muzzleSide + 2), y: this.py + sa * 26 + ca * (G.muzzleSide + 2),
       vx: Math.cos(eject) * (140 + Math.random() * 90), vy: Math.sin(eject) * (140 + Math.random() * 90),
       life: 0.7, w: 6, h: 3, color: 0xffd36b, drag: 3.2, spin: 16, alpha: 0.9,
     });

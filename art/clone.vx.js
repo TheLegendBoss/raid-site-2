@@ -69,29 +69,33 @@ const seg = (pts, w, hi = true) => [
   hi ? line(pts, { stroke: "a3", sw: w * 0.35, cap: "butt", join: "miter", opacity: 0.7 }) : null,
 ]
 
-// The SMG is drawn level along y=39 from the grip at x=44, then angled in so the muzzle sits on the
-// aim line (x=63, y~32.5): that is where the game spawns bullets.
-const smg = () => tf({ rot: -19, origin: [44, 39] },
-  rect(44, 37, 9, 4.6, { r: 1, fill: lin(["m3", "m1"], 90), stroke: "k", sw: 1 }),             // receiver
-  rect(52, 37.4, 6, 3.8, { r: 0.8, fill: lin(["m2", "m0"], 90), stroke: "k", sw: 0.9 }),       // shroud
-  line([53.5, 38.4, 56.5, 38.4], { stroke: "k", sw: 0.7 }), line([53.5, 40.2, 56.5, 40.2], { stroke: "k", sw: 0.7 }),
-  rect(57.5, 38, 4.6, 3, { r: 0.6, fill: "m1", stroke: "k", sw: 0.8 }),                         // barrel + brake
-  rect(61.2, 37.6, 2.2, 3.8, { r: 0.5, fill: "m2", stroke: "k", sw: 0.8 }),
-  rect(40, 37.4, 5, 3.8, { r: 1, fill: "m1", stroke: "k", sw: 0.9 }),                           // folded stock block
-  rect(46, 35.6, 5.5, 2.2, { r: 0.6, fill: "m2", stroke: "k", sw: 0.7 }),                        // sight rail
-  circle(50.4, 36.7, 0.9, { fill: "rd", glow: { r: 2, color: "rd", strength: 1.4 } }),           // red dot
-  rect(47.5, 40.6, 2.6, 1.2, { r: 0.4, fill: "au" }))                                           // ejection port
+// Both arms are held straight out along the aim, so the SMG and the blade point at the target.
+// The SMG sits on y=43.5 (the clone's right, 11.5 off the aim line); the game fires bullets from
+// its muzzle and aims them at the cursor. This canvas is 72 wide so the arm and gun can reach out:
+// the game places it with origin x = 32/72 so the clone's centre stays at (32,32).
+const SY = 43.5
+const smg = () => [
+  rect(48, SY - 2.2, 5, 4.4, { r: 1, fill: "m1", stroke: "k", sw: 0.9 }),                       // folded stock
+  rect(52, SY - 2.5, 9, 5, { r: 1, fill: lin(["m3", "m1"], 90), stroke: "k", sw: 1 }),          // receiver
+  rect(60, SY - 2, 6, 4, { r: 0.8, fill: lin(["m2", "m0"], 90), stroke: "k", sw: 0.9 }),        // shroud
+  line([61.5, SY - 0.9, 64.5, SY - 0.9], { stroke: "k", sw: 0.6 }), line([61.5, SY + 0.9, 64.5, SY + 0.9], { stroke: "k", sw: 0.6 }),
+  rect(65, SY - 1.5, 4.4, 3, { r: 0.6, fill: "m1", stroke: "k", sw: 0.8 }),                      // barrel
+  rect(68.2, SY - 1.9, 2.4, 3.8, { r: 0.5, fill: "m2", stroke: "k", sw: 0.8 }),                  // muzzle brake
+  rect(54, SY - 4.5, 5.5, 2, { r: 0.6, fill: "m2", stroke: "k", sw: 0.7 }),                      // sight rail
+  circle(58.4, SY - 5.6, 0.9, { fill: "rd", glow: { r: 2, color: "rd", strength: 1.4 } }),        // red dot
+  rect(56, SY + 2.3, 2.6, 1.2, { r: 0.4, fill: "au" }),                                           // ejection port
+]
 
-sprite("clone_arms", { w: 64, h: 64 },
-  // right arm to the gun: upper arm out of the pauldron, forearm bent in to the grip
-  seg([42, 49, 47, 47], 6.4), seg([47, 47, 49, 42.5], 5.6),
-  plate(45.4, 43.8, 4.2, 5.6, 1.3, "a3", { sw: 0.8 }),                                       // vambrace cap
+sprite("clone_arms", { w: 72, h: 64 },
+  // right arm: one straight block out of the pauldron to the grip
+  seg([41, SY, 54, SY], 6.4),
+  plate(46, SY - 3.9, 5.5, 7.8, 1.5, "a3", { sw: 0.8 }),                                          // vambrace
   smg(),
-  rect(46.6, 40, 5.6, 5, { r: 1.5, fill: "m1", stroke: "k", sw: 1 }),                        // gauntlet on the grip
-  // left arm, bent, holding the sword low at the side
-  seg([42, 15, 46, 13], 6.4), seg([46, 13, 47.5, 15.5], 5.6),
-  plate(43.6, 11.6, 4.4, 5.2, 1.3, "a3", { sw: 0.8 }),
-  rect(45.4, 12.2, 5.6, 5, { r: 1.5, fill: "m1", stroke: "k", sw: 1 }))                      // gauntlet on the hilt
+  rect(52, SY - 3.2, 6.4, 6.4, { r: 1.5, fill: "m1", stroke: "k", sw: 1 }),                      // gauntlet on the grip
+  // left arm: one straight block out to the sword hand
+  seg([41, 15.5, 52, 15.5], 6.4),
+  plate(44.5, 11.6, 5, 7.8, 1.5, "a3", { sw: 0.8 }),
+  rect(49.2, 12.3, 6.4, 6.4, { r: 1.5, fill: "m1", stroke: "k", sw: 1 }))                         // gauntlet on the hilt
 
 // ---------- arc blade ----------
 // Pivot (the hand) is the canvas centre (32,32); the blade points +x. The game rotates this part
@@ -112,10 +116,10 @@ sprite("clone_boot", { w: 18, h: 11 },
   line([3.5, 6.6, 7.5, 6.6], { stroke: "a3", sw: 0.8, opacity: 0.8 }))
 
 // A look-at sheet (not used by the game): the rest pose assembled on the game's dark ground.
-scene("clone_assembled", { w: 96, h: 64, bg: "#05080a" },
+scene("clone_assembled", { w: 112, h: 64, bg: "#05080a" },
   tf({ x: 16 },
     stamp("clone_boot", 28, 22, { anchor: "center" }), stamp("clone_boot", 38, 42, { anchor: "center" }),
     stamp("clone_body", 32, 32, { anchor: "center" }),
-    tf({ x: 15, y: -20, rot: -40, origin: [32, 32] }, stamp("clone_sword", 32, 32, { anchor: "center" })),
-    stamp("clone_arms", 32, 32, { anchor: "center" }),
+    tf({ rot: -12, origin: [52.2, 15.5] }, stamp("clone_sword", 52.2, 15.5, { anchor: "center" })),
+    stamp("clone_arms", 36, 32, { anchor: "center" }),
     stamp("clone_head", 32, 32, { anchor: "center" })))

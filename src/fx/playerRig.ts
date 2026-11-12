@@ -26,7 +26,7 @@ export class PlayerRig {
     this.bootR = mk('clone_boot');
     this.body = mk('clone_body');
     this.sword = mk('clone_sword').setPosition(A.handX, A.handY).setRotation(A.swordRestRot);
-    this.arms = mk('clone_arms');
+    this.arms = mk('clone_arms').setOrigin(A.armsOriginX, 0.5);
     this.head = mk('clone_head');
     this.parts = [this.bootL, this.bootR, this.body, this.sword, this.arms, this.head];
     this.root = scene.add.container(0, 0, this.parts).setDepth(depth);
