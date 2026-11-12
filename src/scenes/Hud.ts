@@ -694,7 +694,7 @@ export class Hud extends Phaser.Scene {
     // The magazine sits in its well behind the gun and drops out and back in on reload.
     this.magImg
       .setTexture(pixMagKey(GUN_KITS[shape] ? shape : 'smg'))
-      .setPosition(gx + T.pixGun.x + kit.mag.x * sc, iy + kit.mag.y * sc + magY)
+      .setPosition(gx + T.pixGun.x + kit.mag.x * sc - (kit.mag.raked ? magY * T.pixGun.magRake : 0), iy + kit.mag.y * sc + magY)
       .setScale(sc)
       .setAlpha(magA)
       .setVisible(magA > 0.01);

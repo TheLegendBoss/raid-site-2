@@ -44,8 +44,8 @@ export const TUNING = {
     swordRestRot: -0.21, // radians: blade held forward, angled slightly out, pointing at the enemy
   },
 
-  /** The pixel weapon in the HUD panel: sprite scale, offset from the panel's gun origin, recoil px per bolt px. */
-  pixGun: { scale: 3, x: 4, y: -42, kick: 0.5 },
+  /** The pixel weapon in the HUD panel: sprite scale, offset from the panel's gun origin, recoil px per bolt px, rearward px per px dropped for raked magazines (1 / MAG_RAKE_ROWS in art/pixparts/parts.py). */
+  pixGun: { scale: 3, x: 4, y: -42, kick: 0.5, magRake: 0.25 },
   gun: {
     name: 'SMG',
     fireDelay: 0.085,

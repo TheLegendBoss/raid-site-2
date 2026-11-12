@@ -181,43 +181,47 @@ def under_light() -> Canvas:
 
 
 # ---- magazines (right-facing, trimmed) --------------------------------------------------------------
+# Raked magazines lean rearward going down, one pixel per MAG_RAKE_ROWS rows, and the HUD drops and
+# inserts them along that same line (TUNING.pixGun.magRake = 1 / MAG_RAKE_ROWS). Block magazines are upright.
+MAG_RAKE_ROWS = 4
 
-def mag_stick() -> Canvas:
-    c = Canvas()
-    c.shaded(1, 1, 4, 11, 'n')
-    c.rect(1, 1, 1, 11, 'd'); c.rect(1, 11, 4, 11, 'a'); c.rect(2, 4, 4, 4, 'b')
-    c.outline(); return c
+
+def _raked(c: Canvas, x_top: int, rows: int, width: int = 4) -> None:
+    for i in range(rows):
+        x0 = x_top - i // MAG_RAKE_ROWS
+        for k in range(width):
+            c.put(x0 + k, 1 + i, 'a' if i == rows - 1 else 'd' if k == 0 else 'b' if k == width - 1 else 'c')
+        if i % 4 == 3 and i != rows - 1:
+            c.put(x0 + 1, 1 + i, 'b'); c.put(x0 + 2, 1 + i, 'b')
 
 
 def mag_curved() -> Canvas:
+    """SMG and burst magazine."""
+    c = Canvas(); _raked(c, 4, 13); c.outline(); return c
+
+
+def mag_stick() -> Canvas:
+    """Pistol and magnum magazine: the same rake, shorter."""
+    c = Canvas(); _raked(c, 3, 10); c.outline(); return c
+
+
+def mag_block() -> Canvas:
+    """Shotgun: a big chunky block."""
     c = Canvas()
-    for i in range(12):
-        x0 = 1 + i // 4
-        for x in range(x0, x0 + 4):
-            c.put(x, 1 + i, 'd' if x == x0 else 'a' if i == 11 else 'c' if x < x0 + 3 else 'b')
+    c.shaded(1, 1, 8, 10, 'n')
+    c.rect(1, 1, 1, 10, 'd'); c.rect(8, 2, 8, 10, 'b'); c.rect(1, 10, 8, 10, 'a')
+    for y in (3, 5, 7):
+        c.rect(2, y, 7, y, 'b')
     c.outline(); return c
 
 
-def mag_extended() -> Canvas:
+def mag_box() -> Canvas:
+    """Marksman: a tall block."""
     c = Canvas()
-    c.shaded(1, 1, 4, 14, 'n')
-    c.rect(1, 1, 1, 14, 'd'); c.rect(1, 14, 4, 14, 'a')
+    c.shaded(1, 1, 6, 12, 'n')
+    c.rect(1, 1, 1, 12, 'd'); c.rect(6, 2, 6, 12, 'b'); c.rect(1, 12, 6, 12, 'a')
     for y in (4, 7, 10):
-        c.rect(2, y, 4, y, 'b')
-    c.outline(); return c
-
-
-def mag_drum() -> Canvas:
-    c = Canvas()
-    c.shaded(4, 0, 8, 4, 'n')
-    cx, cy, r = 6.0, 9.0, 6.2
-    for y in range(3, 16):
-        for x in range(0, 13):
-            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-            if d <= r:
-                c.put(x, y, 'd' if y - cy < -3 else 'a' if y - cy > 3 else 'c' if d > 3 else 'b')
-    for x, y in ((6, 8), (6, 9), (6, 10), (5, 9), (7, 9)):
-        c.put(x, y, 'a')
+        c.rect(2, y, 5, y, 'b')
     c.outline(); return c
 
 
@@ -227,5 +231,8 @@ PARTS = {
     'stock': {f.__name__: f for f in (stock_buttplate, stock_wire, stock_cheek, stock_ring)},
     'scope': {f.__name__: f for f in (scope_iron, scope_prism, scope_long, scope_reflex)},
     'under': {f.__name__: f for f in (under_grip, under_launcher, under_bayonet, under_light)},
-    'mag': {f.__name__: f for f in (mag_stick, mag_curved, mag_extended, mag_drum)},
+    'mag': {f.__name__: f for f in (mag_stick, mag_curved, mag_block, mag_box)},
 }
+
+# Only approved parts are exported to the game (see build.py). The rest are drafts for design review.
+APPROVED: set[str] = {'mag_stick', 'mag_curved', 'mag_block', 'mag_box'}
