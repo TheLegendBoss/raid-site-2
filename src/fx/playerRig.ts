@@ -5,7 +5,11 @@ import { TUNING } from '../data/tuning';
 
 const A = TUNING.art;
 
-export const CLONE_PARTS = ['clone_body', 'clone_head', 'clone_arms', 'clone_boot', 'clone_sword'] as const;
+export const CLONE_PARTS = [
+  'clone_body', 'clone_head', 'clone_arms', 'clone_boot', 'clone_sword',
+  'clone_arms_pistol', 'clone_arms_shotgun', 'clone_arms_marksman', 'clone_arms_burst',
+  'clone_cleaver', 'clone_stiletto',
+] as const;
 
 export class PlayerRig {
   readonly root: Phaser.GameObjects.Container;
@@ -56,6 +60,16 @@ export class PlayerRig {
   /** The sprite blade is carried at rest; while the arc blade is out, the swing effect replaces it. */
   setBladeOut(out: boolean): void {
     this.sword.setVisible(!out);
+  }
+
+  /** Swap the art part holding the weapon (each weapon has its own arms sprite). */
+  setWeapon(armsKey: string): void {
+    this.arms.setTexture(armsKey);
+  }
+
+  /** Swap the carried blade sprite. */
+  setBlade(key: string): void {
+    this.sword.setTexture(key);
   }
 
   setDashing(on: boolean): void {

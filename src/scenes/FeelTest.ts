@@ -15,7 +15,7 @@ import { Glows } from '../fx/glows';
 import { Particles } from '../fx/particles';
 import { PlayerRig } from '../fx/playerRig';
 import { Ctx } from '../game/ctx';
-import { profile } from '../game/profile';
+import { onStatsChanged, profile } from '../game/profile';
 import { resetVitals, runState, setBanner } from '../game/runState';
 import { BladeSystem } from '../game/systems/blade';
 import { CameraSystem } from '../game/systems/camera';
@@ -47,7 +47,7 @@ export class FeelTest extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.setDefaultCursor('none');
     g.keys = this.input.keyboard!.addKeys(
-      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO,TAB',
+      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO,TAB,B',
     ) as unknown as KeyMap;
 
     const unlock = (): void => g.sfx.unlock();
@@ -61,6 +61,12 @@ export class FeelTest extends Phaser.Scene {
     g.fxGfx = this.add.graphics().setDepth(16);
 
     g.rig = new PlayerRig(this, 14);
+    onStatsChanged((st) => {
+      g.rig.setWeapon(st.weapon.armsKey);
+      g.rig.setBlade(st.blade.spriteKey);
+    });
+    g.rig.setWeapon(profile.stats.weapon.armsKey);
+    g.rig.setBlade(profile.stats.blade.spriteKey);
     g.shieldGfx = this.add.graphics().setDepth(13);
     g.shieldGfx.lineStyle(2, PALETTE.shield, 1);
     g.shieldGfx.strokeCircle(0, 0, T.player.radius + 8);
@@ -76,7 +82,7 @@ export class FeelTest extends Phaser.Scene {
     for (let i = 0; i < BULLET_POOL; i++) {
       this.w.bullets.push({
         img: this.add.image(0, 0, 'px').setDepth(17).setBlendMode(Phaser.BlendModes.ADD).setVisible(false),
-        active: false, friendly: true, x: 0, y: 0, vx: 0, vy: 0, life: 0, dmg: 0,
+        active: false, friendly: true, x: 0, y: 0, vx: 0, vy: 0, life: 0, dmg: 0, pierce: 0, hit: new Set(),
       });
     }
 
@@ -91,6 +97,7 @@ export class FeelTest extends Phaser.Scene {
     g.lootSys = new LootSystem(g);
     g.cam = new CameraSystem(g);
 
+    this.events.on('resume', () => this.input.keyboard!.resetKeys());
     this.resetWorld(true);
   }
 
@@ -187,6 +194,12 @@ export class FeelTest extends Phaser.Scene {
     this.scene.bringToTop('Tree');
   }
 
+  private openBase(): void {
+    this.scene.pause();
+    this.scene.launch('Base', { sfx: this.g.sfx });
+    this.scene.bringToTop('Base');
+  }
+
   private handleDebugKeys(): void {
     const K = Phaser.Input.Keyboard;
     if (K.JustDown(this.g.keys.ONE)) this.g.mobSys.queueSwarm(T.waves.swarmSize);
@@ -197,6 +210,7 @@ export class FeelTest extends Phaser.Scene {
     if (K.JustDown(this.g.keys.M)) this.g.sfx.setMuted(!this.g.sfx.muted);
     if (K.JustDown(this.g.keys.X)) this.g.lootSys.extract();
     if (K.JustDown(this.g.keys.TAB)) this.openTree();
+    if (K.JustDown(this.g.keys.B)) this.openBase();
   }
 
   private resetWorld(first: boolean): void {

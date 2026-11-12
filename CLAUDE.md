@@ -24,7 +24,8 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 
 - The SMG uses a magazine plus reserve (`TUNING.gun`). Reload state, dash/blade cooldown fractions and the shot counter reach the HUD through `runState` (`reload`, `shotSeq`, `dashReady`, `bladeReady`, ping/deny flashes). The HUD animates the bolt, magazine and ejected casings from those fields.
 - Damage is rolled in `src/sim/damage.ts` (`rollDamage`) and shown as pooled floating numbers (`TUNING.numbers`).
-- Keys: R reload, T reset room, H toggle help.
+- Keys: R reload, T reset room, H toggle help, X extract, Tab trees, B base (`src/scenes/Base.ts`: equip, stash, sell, dismantle, quartermaster).
+- Gear lives in `src/data/items.ts` (base items) and `src/data/loot.ts` (rarity, drops, prices); rolls are in `src/sim/loot.ts`, tooltip stat lines in `src/sim/describe.ts`. Equipped gear feeds `EffectiveStats` (weapon and blade variants included).
 - The Neo Zero tileset is not in the repo: its licence forbids redistribution and use in anything where the assets can be extracted (a public repo or any release build, including the .exe, would qualify). Do not commit it without the owner's decision.
 
 ## Trees and stats

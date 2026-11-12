@@ -9,6 +9,7 @@ export const PALETTE = {
   hostile: 0xff5a4d, // red: scavengers
   robot: 0xd070ff, // violet: machines
   loot: 0xffb347, // gold
+  scrap: 0xd8cf9a, // loose scrap
   spark: 0xffe3a0,
   muzzle: 0xffe3a0,
   white: 0xffffff,

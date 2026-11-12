@@ -7,6 +7,12 @@ import headUrl from '../assets/art/clone_head.png?url';
 import armsUrl from '../assets/art/clone_arms.png?url';
 import bootUrl from '../assets/art/clone_boot.png?url';
 import swordUrl from '../assets/art/clone_sword.png?url';
+import armsPistolUrl from '../assets/art/clone_arms_pistol.png?url';
+import armsShotgunUrl from '../assets/art/clone_arms_shotgun.png?url';
+import armsMarksmanUrl from '../assets/art/clone_arms_marksman.png?url';
+import armsBurstUrl from '../assets/art/clone_arms_burst.png?url';
+import cleaverUrl from '../assets/art/clone_cleaver.png?url';
+import stilettoUrl from '../assets/art/clone_stiletto.png?url';
 
 const CLONE_URLS: Record<(typeof CLONE_PARTS)[number], string> = {
   clone_body: bodyUrl,
@@ -14,6 +20,12 @@ const CLONE_URLS: Record<(typeof CLONE_PARTS)[number], string> = {
   clone_arms: armsUrl,
   clone_boot: bootUrl,
   clone_sword: swordUrl,
+  clone_arms_pistol: armsPistolUrl,
+  clone_arms_shotgun: armsShotgunUrl,
+  clone_arms_marksman: armsMarksmanUrl,
+  clone_arms_burst: armsBurstUrl,
+  clone_cleaver: cleaverUrl,
+  clone_stiletto: stilettoUrl,
 };
 
 // Loads the vex-built character parts, bakes the small effect textures from vector drawing, then

@@ -24,7 +24,7 @@ export class CombatSystem {
     runState.hitMarker = 1;
     this.g.nums.spawn(m.x, m.y - m.radius - 6, String(dmg), heavy ? 'blade' : 'gun');
 
-    const kb = heavy ? T.sword.knockback * (isRobot ? 0.3 : 1) : isRobot ? T.robot.gunKnockback : T.scav.gunKnockback;
+    const kb = heavy ? profile.stats.blade.knockback * (isRobot ? 0.3 : 1) : isRobot ? T.robot.gunKnockback : T.scav.gunKnockback;
     m.vx += Math.cos(ang) * kb;
     m.vy += Math.sin(ang) * kb;
 
@@ -48,7 +48,7 @@ export class CombatSystem {
       this.w.trauma = Math.min(1, this.w.trauma + J.swordHitTrauma);
       this.w.zoomPunch = Math.min(0.06, this.w.zoomPunch + J.swordZoomPunch);
       if (isRobot) {
-        m.stagger = T.sword.staggerRobot;
+        m.stagger = profile.stats.blade.stagger;
         m.phase = 'move';
         m.phaseTime = 0;
       }

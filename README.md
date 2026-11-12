@@ -39,6 +39,7 @@ To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z
 | Shift or Space | Dash (brief invulnerability, 0.9s cooldown) |
 | X | Extract: bank carried loot into the stash |
 | Tab | Open the Research and Perk trees (spend Intel earned by clearing waves) |
+| B | Open the Base: equipped gear, carried items, stash, quartermaster (E equip, M move, S sell, D dismantle; sell and dismantle work on stashed items only) |
 | 1 / 2 | Spawn a scavenger swarm / a robot |
 | K | Clear all hostiles |
 | T | Reset the room |

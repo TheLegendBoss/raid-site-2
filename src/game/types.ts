@@ -3,7 +3,7 @@ import type { Item } from '../sim/loot';
 
 export type KeyName =
   | 'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'
-  | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'T' | 'H' | 'ONE' | 'TWO' | 'TAB';
+  | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'T' | 'H' | 'ONE' | 'TWO' | 'TAB' | 'B';
 export type KeyMap = Record<KeyName, Phaser.Input.Keyboard.Key>;
 
 export type MobKind = 'scav' | 'robot';
@@ -49,10 +49,13 @@ export interface Bullet {
   vy: number;
   life: number;
   dmg: number;
+  pierce: number; // extra enemies the round can pass through
+  hit: Set<Mob>; // enemies already hit by this round
 }
 
 export interface Drop {
-  item: Item;
+  item?: Item; // gear
+  scrap?: number; // loose scrap amount
   gfx: Phaser.GameObjects.Graphics;
   glow: Phaser.GameObjects.Image;
   beam?: Phaser.GameObjects.Image;

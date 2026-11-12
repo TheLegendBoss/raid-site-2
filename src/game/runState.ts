@@ -42,7 +42,10 @@ export interface RunState {
   combo: number;
   aimSpread: number; // degrees, for the crosshair
   carried: Item[];
+  carriedScrap: number;
   stash: Item[];
+  weaponName: string;
+  weaponShape: string;
   feed: FeedLine[];
   banner: string;
   bannerTime: number;
@@ -82,7 +85,10 @@ export const runState: RunState = {
   combo: 0,
   aimSpread: TUNING.gun.spread,
   carried: [],
+  carriedScrap: 0,
   stash: [],
+  weaponName: TUNING.gun.name,
+  weaponShape: 'smg',
   feed: [],
   banner: '',
   bannerTime: 0,

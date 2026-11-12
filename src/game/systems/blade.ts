@@ -16,7 +16,7 @@ export class BladeSystem {
   }
 
   updateSword(dt: number): void {
-    const S = T.sword;
+    const B = profile.stats.blade;
     const sw = this.w.sw;
     const ptr = this.g.scene.input.activePointer;
     const rmb = ptr.isDown && ptr.rightButtonDown();
@@ -51,32 +51,32 @@ export class BladeSystem {
 
     sw.t += dt;
     if (sw.state === 'windup') {
-      if (sw.t >= S.windup) {
+      if (sw.t >= B.windup) {
         sw.state = 'swing';
         sw.t = 0;
         sw.angle = this.w.aim;
         sw.hit.clear();
-        this.w.lungeX = Math.cos(this.w.aim) * S.lungeSpeed;
-        this.w.lungeY = Math.sin(this.w.aim) * S.lungeSpeed;
+        this.w.lungeX = Math.cos(this.w.aim) * B.lungeSpeed;
+        this.w.lungeY = Math.sin(this.w.aim) * B.lungeSpeed;
         this.g.sfx.swing();
         this.w.trauma = Math.min(1, this.w.trauma + 0.1);
         this.w.kickX += Math.cos(this.w.aim) * 7;
         this.w.kickY += Math.sin(this.w.aim) * 7;
       } else {
-        this.drawBlade(this.w.aim - sw.dir * (S.arcHalfAngle + 24) * DEG, 0.5, 0);
+        this.drawBlade(this.w.aim - sw.dir * (B.arcHalfAngle + 24) * DEG, 0.5, 0);
         return;
       }
     }
 
     if (sw.state === 'swing') {
-      const p = clamp(sw.t / S.swing, 0, 1);
+      const p = clamp(sw.t / B.swing, 0, 1);
       const eased = 1 - (1 - p) * (1 - p);
-      const start = sw.angle - sw.dir * S.arcHalfAngle * DEG;
-      const end = sw.angle + sw.dir * S.arcHalfAngle * DEG;
+      const start = sw.angle - sw.dir * B.arcHalfAngle * DEG;
+      const end = sw.angle + sw.dir * B.arcHalfAngle * DEG;
       const theta = start + (end - start) * eased;
       this.drawBlade(theta, 1, sw.dir);
       this.bladeHits(theta);
-      if (sw.t >= S.swing) {
+      if (sw.t >= B.swing) {
         sw.state = 'recover';
         sw.t = 0;
       }
@@ -84,9 +84,9 @@ export class BladeSystem {
     }
 
     // recover
-    const fade = 1 - clamp(sw.t / S.recover, 0, 1);
-    this.drawBlade(sw.angle + sw.dir * S.arcHalfAngle * DEG, fade * 0.7, 0);
-    if (sw.t >= S.recover) {
+    const fade = 1 - clamp(sw.t / B.recover, 0, 1);
+    this.drawBlade(sw.angle + sw.dir * B.arcHalfAngle * DEG, fade * 0.7, 0);
+    if (sw.t >= B.recover) {
       sw.state = 'idle';
       sw.t = 0;
     }

@@ -235,7 +235,7 @@ Vaults, lockdown points, population and base growth, the finite Aug pool, clonin
 5. Terminology: "Aug" is the player's character, and "clone" returns later as a research unlock. Should the in-game "CLONE LOST" banner and the docs move to "Aug"?
 6. Keep the Neo Zero tileset out of the repo permanently, or decide later? (Currently out.)
 
-7. **Perk design (needs a longer discussion).** Build-defining perks are decided. Still open: do perks belong to the programme or to each Aug (and does a dead Aug take its build with it)? Are builds chosen once (a class or doctrine) or assembled from exclusive picks as you rank up? How many active build slots? Do perks change what the weapons and blade *do* (new behaviours) rather than add numbers? How does the Aug pool (question 1) feed in? Respec: free, costly or never?
+7. **Perk design (larger discussion, later).** Decided: builds are build-defining, and perks belong to each Aug, so a dead Aug takes its build with it. A research tech lets the programme **recover a share of perk points**, so a new Aug is never back at level 1. Respec is **costly**. Leaning: a **doctrine** you pick, with **prestige classes** above it, but it needs its own discussion (how doctrines are chosen, how many build slots, whether perks change what weapons and the blade do, how the Aug pool feeds in). Do not build on the current perk nodes.
 8. Armoury numbers to tune: mod slots per weapon (2 or 3), analysis-progress cap (about 40%), Intel payout per rarity, universal-tech list.
 
 *Resolved:* vaults are generated once per save with authored story rooms placed in them (confirmed). The rest of the team is background only.

@@ -18,6 +18,7 @@ export class GunSystem {
 
   updateGun(dt: number): void {
     const G = T.gun;
+    const wp = profile.stats.weapon;
     const ptr = this.g.scene.input.activePointer;
     const s = runState;
     this.w.fireCd -= dt;
@@ -25,7 +26,25 @@ export class GunSystem {
     s.reserve = Math.min(s.maxReserve, s.reserve + G.reserveRegenPerSec * dt);
 
     if (Phaser.Input.Keyboard.JustDown(this.g.keys.R)) this.startReload();
-    if (this.w.reloadT >= 0) this.tickReload(dt);
+    if (this.w.reloadT >= 0) {
+      this.w.burstLeft = 0;
+      this.tickReload(dt);
+    }
+
+    // The rest of a burst fires on its own timer, whatever the trigger does.
+    if (this.w.burstLeft > 0) {
+      this.w.burstTimer -= dt;
+      if (this.w.burstTimer <= 0) {
+        if (s.mag >= 1) {
+          this.fireRound(wp);
+          this.w.burstLeft -= 1;
+          this.w.burstTimer = wp.burstGap;
+        } else {
+          this.w.burstLeft = 0;
+        }
+      }
+      return;
+    }
 
     const firing = ptr.isDown && ptr.leftButtonDown();
     if (!firing || this.w.fireCd > 0 || this.w.sw.state !== 'idle' || this.w.reloadT >= 0) return;
@@ -41,44 +60,57 @@ export class GunSystem {
       return;
     }
 
+    this.fireRound(wp);
+    this.w.fireCd = wp.fireDelay;
+    if (wp.burstCount > 1) {
+      this.w.burstLeft = wp.burstCount - 1;
+      this.w.burstTimer = wp.burstGap;
+    }
+  }
+
+  /** One round (or one shell of pellets) leaves the weapon, with all its juice. */
+  private fireRound(wp: typeof profile.stats.weapon): void {
+    const s = runState;
     s.mag -= 1;
     s.shotSeq += 1;
-    this.w.fireCd = G.fireDelay;
     const cone = (profile.stats.spread + this.w.bloom) * DEG;
-    // The gun is held straight out on the clone's right, so it fires from the muzzle and converges on the cursor.
+    // The weapon is held straight out on the clone's right, so it fires from the muzzle and converges on the cursor.
     const ca = Math.cos(this.w.aim);
     const sa = Math.sin(this.w.aim);
-    const mx = this.w.px + ca * G.muzzleOffset - sa * G.muzzleSide;
-    const my = this.w.py + sa * G.muzzleOffset + ca * G.muzzleSide;
+    const mx = this.w.px + ca * wp.muzzleOffset - sa * wp.muzzleSide;
+    const my = this.w.py + sa * wp.muzzleOffset + ca * wp.muzzleSide;
     const toCursor = Math.hypot(this.w.mouseX - mx, this.w.mouseY - my) > 90
       ? Math.atan2(this.w.mouseY - my, this.w.mouseX - mx)
       : this.w.aim;
-    const a = toCursor + (Math.random() - 0.5) * 2 * cone;
-    const dmg = rollDamage(this.g.rng, profile.stats.gunDamage, G.damageVariance);
-    this.fireBullet(mx, my, a, G.bulletSpeed, dmg, true, G.bulletLife, 0xe9fff6, 28, 2.6);
+    for (let i = 0; i < wp.pellets; i++) {
+      const a = toCursor + (Math.random() - 0.5) * 2 * cone;
+      const dmg = rollDamage(this.g.rng, profile.stats.gunDamage, wp.damageVariance);
+      this.fireBullet(mx, my, a, wp.bulletSpeed, dmg, true, wp.bulletLife, 0xe9fff6, wp.bulletW, wp.bulletH, wp.pierce);
+    }
     this.w.bloom = Math.min(5.5, this.w.bloom + 0.9);
     if (s.mag < 1 && s.reserve >= 1) this.startReload();
 
-    // Juice: flash, light, casing, recoil, kick, noise.
+    // Juice: flash, light, casing, recoil, kick, noise. Heavier weapons flash and kick bigger.
+    const heft = clamp(0.8 + wp.recoilImpulse / 150, 0.8, 1.8);
     this.g.particles.emit({
-      x: mx, y: my, vx: 0, vy: 0, life: 0.045, w: 40, h: 6, rot: toCursor,
+      x: mx, y: my, vx: 0, vy: 0, life: 0.045, w: 40 * heft, h: 6 * heft, rot: toCursor,
       color: PALETTE.muzzle, add: true,
     });
-    this.g.glows.at(mx, my, PALETTE.muzzle, 1.5, 0.8, 0.075, 0.85);
-    this.g.glows.at(this.w.px, this.w.py, PALETTE.muzzle, 4.2, 3.2, 0.09, 0.14);
+    this.g.glows.at(mx, my, PALETTE.muzzle, 1.5 * heft, 0.8, 0.075, 0.85);
+    this.g.glows.at(this.w.px, this.w.py, PALETTE.muzzle, 4.2 * heft, 3.2, 0.09, 0.14);
     const eject = this.w.aim + Math.PI / 2 + (Math.random() - 0.5) * 0.8;
     this.g.particles.emit({
-      x: this.w.px + ca * 26 - sa * (G.muzzleSide + 2), y: this.w.py + sa * 26 + ca * (G.muzzleSide + 2),
+      x: this.w.px + ca * 26 - sa * (wp.muzzleSide + 2), y: this.w.py + sa * 26 + ca * (wp.muzzleSide + 2),
       vx: Math.cos(eject) * (140 + Math.random() * 90), vy: Math.sin(eject) * (140 + Math.random() * 90),
-      life: 0.7, w: 6, h: 3, color: 0xffd36b, drag: 3.2, spin: 16, alpha: 0.9,
+      life: 0.7, w: wp.pellets > 1 ? 9 : 6, h: 3, color: wp.pellets > 1 ? 0xc2261d : 0xffd36b, drag: 3.2, spin: 16, alpha: 0.9,
     });
-    this.w.pvx -= Math.cos(this.w.aim) * G.recoilImpulse;
-    this.w.pvy -= Math.sin(this.w.aim) * G.recoilImpulse;
-    this.w.kickX -= Math.cos(this.w.aim) * G.cameraKick;
-    this.w.kickY -= Math.sin(this.w.aim) * G.cameraKick;
-    this.w.trauma = Math.min(1, this.w.trauma + G.shotTrauma);
+    this.w.pvx -= Math.cos(this.w.aim) * wp.recoilImpulse;
+    this.w.pvy -= Math.sin(this.w.aim) * wp.recoilImpulse;
+    this.w.kickX -= Math.cos(this.w.aim) * wp.cameraKick;
+    this.w.kickY -= Math.sin(this.w.aim) * wp.cameraKick;
+    this.w.trauma = Math.min(1, this.w.trauma + wp.shotTrauma);
     this.g.rig.kick();
-    this.g.sfx.shoot();
+    this.g.sfx.shoot(wp.sound);
   }
 
   startReload(): void {
@@ -130,7 +162,7 @@ export class GunSystem {
 
   fireBullet(
     x: number, y: number, angle: number, speed: number, dmg: number,
-    friendly: boolean, life: number, color: number, w: number, h: number,
+    friendly: boolean, life: number, color: number, w: number, h: number, pierce = 0,
   ): void {
     const b = this.w.bullets.find((o) => !o.active);
     if (!b) return;
@@ -142,6 +174,8 @@ export class GunSystem {
     b.vy = Math.sin(angle) * speed;
     b.life = life;
     b.dmg = dmg;
+    b.pierce = pierce;
+    b.hit.clear();
     b.img.setVisible(true).setTint(color).setPosition(x, y).setRotation(angle).setScale(w / 4, h / 4);
   }
 
@@ -166,10 +200,12 @@ export class GunSystem {
       if (!spent && b.friendly) {
         const ang = Math.atan2(b.vy, b.vx);
         for (const m of this.w.mobs) {
-          if (m.dead) continue;
+          if (m.dead || b.hit.has(m)) continue;
           if (segmentHitsCircle(b.x, b.y, nx, ny, m.x, m.y, m.radius + 3)) {
             this.g.combat.damageMob(m, b.dmg, ang, 'gun', nx, ny);
-            spent = true;
+            b.hit.add(m);
+            if (b.pierce > 0) b.pierce -= 1;
+            else spent = true;
             break;
           }
         }

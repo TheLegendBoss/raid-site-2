@@ -168,12 +168,26 @@ export class Sfx {
 
   // ---- Player weapons -------------------------------------------------
 
-  shoot(): void {
+  shoot(kind: 'smg' | 'pistol' | 'shotgun' | 'rifle' = 'smg'): void {
     if (!this.gate('shoot', 30)) return;
     const p = this.rp();
-    this.burst({ filter: 'highpass', f0: 3200 * p, f1: 900, dur: 0.05, gain: 0.5, wet: 0.1 });
-    this.tone({ type: 'sawtooth', f0: 190 * p, f1: 52, dur: 0.1, gain: 0.5, wet: 0.2 });
-    this.burst({ filter: 'lowpass', f0: 1100 * p, f1: 180, dur: 0.26, gain: 0.2, wet: 0.7 });
+    if (kind === 'pistol') {
+      this.burst({ filter: 'highpass', f0: 3800 * p, f1: 1200, dur: 0.05, gain: 0.5, wet: 0.1 });
+      this.tone({ type: 'sawtooth', f0: 250 * p, f1: 70, dur: 0.09, gain: 0.45, wet: 0.2 });
+      this.burst({ filter: 'lowpass', f0: 1300 * p, f1: 220, dur: 0.2, gain: 0.18, wet: 0.6 });
+    } else if (kind === 'shotgun') {
+      this.burst({ filter: 'highpass', f0: 2600 * p, f1: 600, dur: 0.08, gain: 0.6, wet: 0.2 });
+      this.tone({ type: 'sawtooth', f0: 120 * p, f1: 32, dur: 0.22, gain: 0.65, wet: 0.3 });
+      this.burst({ filter: 'lowpass', f0: 1500 * p, f1: 110, dur: 0.42, gain: 0.45, wet: 0.7 });
+    } else if (kind === 'rifle') {
+      this.burst({ filter: 'highpass', f0: 4200 * p, f1: 1200, dur: 0.06, gain: 0.62, wet: 0.15 });
+      this.tone({ type: 'sawtooth', f0: 150 * p, f1: 40, dur: 0.16, gain: 0.58, wet: 0.3 });
+      this.burst({ filter: 'lowpass', f0: 900 * p, f1: 90, dur: 0.5, gain: 0.3, wet: 0.85 });
+    } else {
+      this.burst({ filter: 'highpass', f0: 3200 * p, f1: 900, dur: 0.05, gain: 0.5, wet: 0.1 });
+      this.tone({ type: 'sawtooth', f0: 190 * p, f1: 52, dur: 0.1, gain: 0.5, wet: 0.2 });
+      this.burst({ filter: 'lowpass', f0: 1100 * p, f1: 180, dur: 0.26, gain: 0.2, wet: 0.7 });
+    }
   }
 
   empty(): void {

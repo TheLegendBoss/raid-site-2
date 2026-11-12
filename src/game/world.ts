@@ -38,6 +38,10 @@ export class World {
   prevDashReady = 1;
   prevBladeReady = 1;
 
+  // burst fire
+  burstLeft = 0;
+  burstTimer = 0;
+
   // reload
   reloadT = -1; // seconds into the current reload, -1 when idle
   reloadTime: number = T.gun.reloadTime;
