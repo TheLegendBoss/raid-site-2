@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { PALETTE } from './data/palette';
+import * as profileApi from './game/profile';
 import { profile } from './game/profile';
+import { makeItem } from './sim/loot';
 import { runState } from './game/runState';
 import { Base } from './scenes/Base';
 import { Boot } from './scenes/Boot';
@@ -23,5 +25,5 @@ const game = new Phaser.Game({
 
 // Dev-only handle so smoke tests and the console can inspect live state.
 if (import.meta.env.DEV) {
-  (window as unknown as { __raid: unknown }).__raid = { game, runState, profile };
+  (window as unknown as { __raid: unknown }).__raid = { game, runState, profile, profileApi, makeItem };
 }
