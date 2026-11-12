@@ -2,7 +2,7 @@
 // on a grid joined by trunk lines; small chip nodes hang under their parent.
 // Opened from the room with TAB; the room is paused underneath.
 import Phaser from 'phaser';
-import { snapFont } from '../ui/pixelUi';
+import { sizePanel, snapFont, uiKey, uiPanel } from '../ui/pixelUi';
 import { FONT, PALETTE, TREE_TINTS, hex } from '../data/palette';
 import {
   NODE_BY_ID,
@@ -28,7 +28,7 @@ interface View {
   y: number;
   w: number;
   h: number;
-  box: Phaser.GameObjects.Graphics;
+  box: Phaser.GameObjects.NineSlice;
   icon: Phaser.GameObjects.Graphics;
   name: Txt;
   cost: Txt;
@@ -57,7 +57,9 @@ export class Tree extends Phaser.Scene {
   private grid!: Phaser.GameObjects.Graphics;
   private lines!: Phaser.GameObjects.Graphics;
   private cursor!: Phaser.GameObjects.Graphics;
-  private uiBg!: Phaser.GameObjects.Graphics;
+  private uiBg: Phaser.GameObjects.NineSlice[] = [];
+  private tabBoxes: Phaser.GameObjects.NineSlice[] = [];
+  private infoPanel!: Phaser.GameObjects.NineSlice;
   private title!: Txt;
   private tabText: Txt[] = [];
   private intelText!: Txt;
@@ -94,6 +96,7 @@ export class Tree extends Phaser.Scene {
     showCursor(this, true);
     this.views.clear();
     this.tabText = [];
+    this.tabBoxes = [];
     this.bg = this.add.rectangle(0, 0, 10, 10, PALETTE.bg, 1).setOrigin(0, 0).setDepth(0);
     this.grid = this.add.graphics().setDepth(1);
     this.world = this.add.container(0, 0).setDepth(2);
@@ -130,11 +133,15 @@ export class Tree extends Phaser.Scene {
   // ------------------------------------------------------------------
 
   private buildUi(): void {
-    this.uiBg = this.add.graphics();
+    this.uiBg = [uiPanel(this, 'panel', 0, 0, 10, 10), uiPanel(this, 'panel', 0, 0, 10, 10)];
     this.title = this.text(0, 0, '', 26, PALETTE.text);
-    this.intelText = this.text(0, 0, '', 20, PALETTE.robot).setOrigin(1, 0);
-    for (const t of TABS) this.tabText.push(this.text(0, 0, t.toUpperCase(), 14, PALETTE.textDim));
+    this.intelText = this.text(0, 0, '', 16, PALETTE.robot).setOrigin(1, 0);
+    for (const t of TABS) {
+      this.tabBoxes.push(uiPanel(this, 'tab_un', 0, 0, 10, 10));
+      this.tabText.push(this.text(0, 0, t.toUpperCase(), 16, PALETTE.textDim));
+    }
     this.hint = this.text(0, 0, '', 13, PALETTE.textDim).setOrigin(0, 1);
+    this.infoPanel = uiPanel(this, 'panel', 0, 0, 10, 10);
     this.infoGfx = this.add.graphics();
     this.infoTitle = this.text(0, 0, '', 20, PALETTE.white);
     this.infoBody = this.text(0, 0, '', 14, PALETTE.text);
@@ -143,8 +150,8 @@ export class Tree extends Phaser.Scene {
     this.flash = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0, 0);
     this.add
       .container(0, 0, [
-        this.uiBg, this.title, this.intelText, ...this.tabText, this.hint,
-        this.infoGfx, this.infoTitle, this.infoBody, this.infoStatus, this.flash,
+        ...this.uiBg, ...this.tabBoxes, this.title, this.intelText, ...this.tabText, this.hint,
+        this.infoPanel, this.infoGfx, this.infoTitle, this.infoBody, this.infoStatus, this.flash,
       ])
       .setDepth(10);
   }
@@ -184,7 +191,7 @@ export class Tree extends Phaser.Scene {
       const chip = n.kind === 'chip';
       const w = chip ? L.chipW : L.nodeW;
       const h = chip ? L.chipH : L.nodeH;
-      const box = this.add.graphics();
+      const box = uiPanel(this, 'btn', 0, 0, w, h);
       const icon = this.add.graphics();
       const size = chip ? 12 : 13;
       const name = this.text(chip ? 6 : 10, chip ? 4 : 8, n.name, size, PALETTE.text);
@@ -223,24 +230,11 @@ export class Tree extends Phaser.Scene {
   private drawNode(v: View): void {
     const st = this.stateOf(v.node);
     const tint = TREE_TINTS[v.node.tint];
-    const chip = v.node.kind === 'chip';
-    const g = v.box;
-    g.clear();
-    const dim = st === 'locked' ? 0.35 : 1;
-    g.fillStyle(0x050c12, 0.92);
-    g.fillRect(0, 0, v.w, v.h);
-    g.fillStyle(tint, st === 'owned' ? 0.34 : st === 'locked' ? 0.07 : 0.18);
-    g.fillRect(0, 0, v.w, v.h);
-    // Scanline texture.
-    g.lineStyle(1, 0x000000, 0.18);
-    for (let y = 3; y < v.h; y += 4) g.lineBetween(0, y, v.w, y);
-    const borderColor = st === 'ready' ? 0xffffff : st === 'locked' ? 0x6a7a80 : tint;
-    g.lineStyle(st === 'owned' || st === 'ready' ? 2 : 1.5, borderColor, st === 'locked' ? 0.5 : st === 'poor' ? 0.7 : 1);
-    g.strokeRect(0, 0, v.w, v.h);
-    if (chip) {
-      g.fillStyle(tint, dim);
-      g.fillRect(0, 0, 3, v.h);
-    }
+    // A 9-slice card tinted by the branch colour: brighter plate when owned, dim when locked.
+    v.box
+      .setTexture(uiKey(st === 'owned' ? 'wns_btn_hover' : st === 'ready' ? 'wns_btn' : st === 'locked' ? 'wns_btn_dis' : 'wns_field'))
+      .setTint(tint)
+      .setAlpha(st === 'locked' ? 0.55 : 1);
     v.icon.setAlpha(st === 'locked' ? 0.3 : st === 'poor' ? 0.7 : 1);
     v.name.setAlpha(st === 'locked' ? 0.5 : 1);
     if (st === 'owned') {
@@ -320,10 +314,16 @@ export class Tree extends Phaser.Scene {
   private drawHeader(): void {
     this.title.setText(`| ${TREE_LABELS[this.tab]} |`);
     this.intelText.setText(`INTEL ${profile.intel.toLocaleString('en-US')}`);
+    let tx = 26;
     this.tabText.forEach((t, i) => {
       const on = TABS[i] === this.tab;
       t.setColor(hex(on ? PALETTE.white : PALETTE.textDim));
-      t.setText(`${on ? '[' : ' '}${TABS[i].toUpperCase()}${on ? ']' : ' '}`);
+      t.setText(TABS[i].toUpperCase());
+      // Tabs sit on the header's lower border; the active one stands a little taller.
+      const box = this.tabBoxes[i].setTexture(uiKey(on ? 'wns_tab_sel' : 'wns_tab_un'));
+      sizePanel(box, tx, on ? 44 : 48, t.width + 32, on ? 42 : 38);
+      t.setPosition(tx + 16, on ? 56 : 58);
+      tx += t.width + 40;
     });
   }
 
@@ -331,6 +331,7 @@ export class Tree extends Phaser.Scene {
     const v = this.views.get(this.selected);
     const g = this.infoGfx;
     g.clear();
+    this.infoPanel.setVisible(!!v);
     if (!v) return;
     const n = v.node;
     const st = this.stateOf(n);
@@ -358,10 +359,9 @@ export class Tree extends Phaser.Scene {
     this.infoStatus.setText(status).setColor(hex(color));
     const ph = 20 + this.infoTitle.height + 8 + this.infoBody.height + 12 + this.infoStatus.height + 16;
     const y = h - FOOTER_H - ph - 12;
-    g.fillStyle(0x040a0f, 0.9);
-    g.fillRect(x, y, pw, ph);
-    g.lineStyle(2, TREE_TINTS[n.tint], 0.9);
-    g.strokeRect(x, y, pw, ph);
+    sizePanel(this.infoPanel, x, y, pw, ph);
+    g.fillStyle(TREE_TINTS[n.tint], 1);
+    g.fillRect(x + 6, y + 6, 4, ph - 12);
     this.infoTitle.setPosition(x + 18, y + 14);
     this.infoBody.setPosition(x + 18, y + 14 + this.infoTitle.height + 8);
     this.infoStatus.setPosition(x + 18, y + ph - 16 - this.infoStatus.height);
@@ -372,17 +372,11 @@ export class Tree extends Phaser.Scene {
     const h = this.scale.height;
     this.bg.setSize(w, h);
     this.flash.setSize(w, h);
-    const g = this.uiBg;
-    g.clear();
-    g.fillStyle(PALETTE.bg, 0.88);
-    g.fillRect(0, 0, w, HEADER_H);
-    g.fillRect(0, h - FOOTER_H, w, FOOTER_H);
-    g.lineStyle(1, PALETTE.structureDim, 0.8);
-    g.lineBetween(0, HEADER_H, w, HEADER_H);
-    g.lineBetween(0, h - FOOTER_H, w, h - FOOTER_H);
+    // Header and footer are panels pushed past the screen edge so only the inner border shows.
+    sizePanel(this.uiBg[0], -12, -12, w + 24, HEADER_H + 12);
+    sizePanel(this.uiBg[1], -12, h - FOOTER_H, w + 24, FOOTER_H + 12);
     this.title.setPosition(24, 14);
-    this.tabText.forEach((t, i) => t.setPosition(26 + i * 120, 52));
-    this.intelText.setPosition(w - 24, 18);
+    this.intelText.setPosition(w - 24, 16);
     this.hint
       .setText('ARROWS select   ENTER / CLICK unlock   DRAG pan   WHEEL zoom   Q E switch tree   TAB close')
       .setPosition(24, h - 14);
@@ -500,7 +494,7 @@ export class Tree extends Phaser.Scene {
       // Tabs live in the header.
       TABS.forEach((t, i) => {
         const tt = this.tabText[i];
-        if (p.x >= tt.x && p.x <= tt.x + 110 && p.y >= tt.y - 6) this.switchTab(t);
+        if (p.x >= tt.x - 16 && p.x <= tt.x + tt.width + 16 && p.y >= 44) this.switchTab(t);
       });
       return;
     }

@@ -5,6 +5,7 @@ import { FONT, PALETTE, hex } from '../data/palette';
 import { getSfx } from '../fx/audio';
 import { Menu } from '../ui/menu';
 import { showCursor } from '../ui/cursor';
+import { sizePanel, uiPanel } from '../ui/pixelUi';
 
 export interface PauseData {
   mission: boolean;
@@ -15,6 +16,7 @@ export class Pause extends Phaser.Scene {
   private data0!: PauseData;
   private menu!: Menu;
   private dim!: Phaser.GameObjects.Rectangle;
+  private card!: Phaser.GameObjects.NineSlice;
   private head!: Phaser.GameObjects.Text;
   private note!: Phaser.GameObjects.Text;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -33,6 +35,7 @@ export class Pause extends Phaser.Scene {
     showCursor(this, true);
     this.armed = false;
     this.dim = this.add.rectangle(0, 0, 10, 10, 0x000000, 0.66).setOrigin(0, 0).setDepth(0);
+    this.card = uiPanel(this, 'panel', 0, 0, 10, 10).setDepth(1).setAlpha(0.96);
     this.head = this.add
       .text(0, 0, 'PAUSED', { fontFamily: FONT, fontSize: '48px', color: '#ffffff' })
       .setOrigin(0.5).setResolution(1).setDepth(5);
@@ -88,10 +91,14 @@ export class Pause extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
     this.dim.setSize(w, h);
-    const top = h * 0.5 - 120;
+    const top = h * 0.5 - 150;
     this.head.setPosition(w / 2, top);
     this.menu.layout(w / 2, top + 50);
     this.note.setPosition(w / 2, top + 50 + this.menu.height + 20).setText('ESC to resume');
+    // A panel behind the title, the buttons and the note.
+    const pw = 420;
+    const ph = 50 + this.menu.height + 20 + 28 + 56;
+    sizePanel(this.card, Math.round(w / 2 - pw / 2), Math.round(top - 56), pw, ph);
   }
 
   update(): void {

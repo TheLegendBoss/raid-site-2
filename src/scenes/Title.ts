@@ -37,7 +37,7 @@ export class Title extends Phaser.Scene {
     this.title = this.add
       .text(0, 0, 'RAID SITE 2', { fontFamily: FONT, fontSize: '96px', color: '#ffffff' })
       .setOrigin(0.5, 0.5).setResolution(1).setDepth(5);
-    this.title.setShadow(0, 0, hex(PALETTE.structure), 22, false, true);
+    this.title.setShadow(0, 6, hex(PALETTE.structureDim), 0, false, true);
     this.tag = this.add
       .text(0, 0, 'RECLAIM THE DERELICT WORLD', { fontFamily: FONT, fontSize: '16px', color: hex(PALETTE.textDim) })
       .setOrigin(0.5, 0.5).setResolution(1).setDepth(5);
