@@ -4,7 +4,13 @@ Short on purpose. It records only the decisions that are expensive to change lat
 
 ## 1. Setting and structure
 
-**Premise.** The world is vague and covered in sealed shelters. Inside the **vaults** and **silos**, whole populations sleep in cryosleep. You are a clone super soldier. You reclaim vaults and silos, and each one you take back wakes more people and grows the home base, while the rest of your team presses further out. Tone: grimdark, with the dread of Fallout's vaults and the sealed, layered society of *Silo*, and the base-growing meta of XCOM. These are inspirations only, so names and lore stay our own. Each site tells part of what happened to it.
+**Premise.** The world is vague and covered in sealed shelters. Inside the **vaults** and **silos**, whole populations sleep in cryosleep. They were put there to be woken once machines had terraformed the planet. You are an **Aug** (short for Augmented), one of a limited number built to reclaim the world on their behalf. Something went wrong and you were woken **before the terraforming even began**. Many vaults have fallen. Tone: grimdark, with the dread of Fallout's vaults and the sealed, layered society of *Silo*, and the base-growing meta of XCOM. These are inspirations only, so names and lore stay our own.
+
+**The long goal.** Each vault you reclaim wakes more people and grows your base. The ultimate goal is to **restart the terraforming machines** so the world can be fixed and made to live again. It is a "plant trees for shade you will never sit in" story: you will not see the world it makes.
+
+**Hope and horror in every site.** Each site tells two stories at once. The idealistic layer is what the builders meant (seed vaults, nurseries, murals, banners for "those who come after"). The grimdark layer is what became of it (the fallen, the failed, the barricaded). Props and logs should carry both, because the contrast is the tone.
+
+**Augs.** There are only a set number of Augs available, like the soldiers in XCOM. You play one. When it dies, you play the next one. **Research and perks you unlock persist and improve the current Aug and every future one.** Cloning arrives later as a research unlock, so death is cheap late and costly early. The rest of the Augs work in the background (XCOM's NPC soldiers), pressing outward and feeding the base. **Post-MVP, and not played.**
 
 **Two kinds of site:**
 
@@ -20,9 +26,9 @@ Short on purpose. It records only the decisions that are expensive to change lat
 
 **Lockdown points (vaults only, from v0.8).** A checkpoint inside a vault. Reaching one secures the floors up to it and expands the base into them. If you die before the next lockdown point, the floors you reached since the last one repopulate with enemies.
 
-**Home base and population (XCOM-style).** A claimed vault adds cryo pods to your **population**. Population is the meta score of the reclaim and funds base growth (new facilities such as a bigger stash, a better quartermaster, a clone vat). The rest of the team working further out is a background layer. **(OPEN: do you ever play them, or are they a passive income and flavour? Not in the MVP either way.)**
+**Home base and population (XCOM-style).** A claimed vault adds cryo pods to your **population**. Population is the meta score of the reclaim and funds base growth (new facilities such as a bigger stash, a better quartermaster, a research lab, later a clone vat). Research and perks are bought at the base.
 
-**Clone and death.** Death regrows the clone at the base's clone vat, which ties the clone terminology to the setting.
+**Who are the scavengers?** **(OPEN, proposed:)** Humans from fallen vaults: sleepers woken early when their systems failed, and what survived on their own after. That makes every fight against them part of the horror layer, and they were never the enemy by choice.
 
 ## 2. Goal of the MVP
 
@@ -47,7 +53,7 @@ BASE (stash, quartermaster, loadout)
 ```
 
 - **Extract points:** one at the silo entrance and one after the Warden. Reaching either banks everything carried. Mid-floor extraction is out of scope.
-- **Death:** the clone regrows at the base. **Carried** loot is lost. The **stash** and **equipped gear** survive. (Decided.)
+- **Death:** **Carried** loot is lost. The **stash** and **equipped gear** survive. (Decided.) In the MVP the Aug simply regrows at the base. Post-MVP the Aug is lost and you play the next one from a finite pool, until research unlocks cloning.
 - **Clearing a silo:** defeating the Warden ends that silo. It pays a **completion reward** (a guaranteed item roll and a vault key or access card).
 - **Keys and gates:** each silo's gate needs a key found on that silo. Vault gates (later) need keys or gear dropped by silos, which is how the sites interlock.
 - **Carry limit:** 10 carried slots. Full means you choose what to drop, which is the pressure that makes extracting a decision.
@@ -184,12 +190,15 @@ Rule for every step: `npm run typecheck`, `npm run build`, run it in a browser. 
 
 ## 11. Out of scope for the MVP
 
-Vaults, lockdown points, population and base growth, random affixes, crafting and upgrades, a Module slot, weapon swapping mid-run, co-op, a world map, multiple characters, story cutscenes, music.
+Vaults, lockdown points, population and base growth, the finite Aug pool, research, perks and cloning, the background Augs, random affixes, crafting and upgrades, a Module slot, weapon swapping mid-run, co-op, a world map, multiple characters, story cutscenes, music.
 
 ## 12. Open questions
 
-1. Is a vault authored room by room, or generated once from a seed with authored story rooms placed in it? (The table in section 1 assumes the second, from v0.8.)
-2. What does the rest of the team do: passive income and flavour, or playable? (Section 1.)
-3. How many floors does the introductory vault have, and what is its story? What happened to the first three connected vaults?
-4. What is the clone's origin: who made it, and why does it remember nothing? (Optional, but it shapes every story prop.)
-5. Keep the Neo Zero tileset out of the repo permanently, or decide later? (Currently out.)
+1. How many Augs in the pool, and are they individual (names, traits, a rank like XCOM soldiers) or interchangeable? Do perks belong to the Aug or to the programme? (Assumed: unlocks are shared.)
+2. Who are the scavengers? (Proposed in section 1: sleepers and survivors of fallen vaults.)
+3. What went wrong and woke you early? Who or what sabotaged the schedule? (Needs a shape before the introductory vault.)
+4. How many floors does the introductory vault have, and what happened to the first three connected vaults?
+5. Terminology: "Aug" is the player's character, and "clone" returns later as a research unlock. Should the in-game "CLONE LOST" banner and the docs move to "Aug"?
+6. Keep the Neo Zero tileset out of the repo permanently, or decide later? (Currently out.)
+
+*Resolved:* vaults are generated once per save with authored story rooms placed in them (confirmed). The rest of the team is background only.

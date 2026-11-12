@@ -35,7 +35,8 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 
 - **Carried**: unequipped loot held in the run; lost on death.
 - **Stash**: banked loot; survives death. Reached by extracting.
-- **Clone**: the player's body. Death regrows it; the stash, equipped gear and claimed sites persist.
+- **Aug** (Augmented): the player's character, one of a finite set built to reclaim the world. Research and perks persist across Augs. Post-MVP death costs an Aug; in the MVP it regrows at the base.
+- **Clone**: a late research unlock that makes Aug death cheap. The code and HUD still say "clone" for the MVP's free regrow.
 - **Silo**: a randomly generated, disposable site with a clear ending (a Warden). The MVP test bed. Not connected to the network.
 - **Vault**: a connected, persistent site (generated once per save, with authored story rooms). Claiming one adds population and grows the base.
 - **Population**: sleepers woken from cryosleep in claimed vaults. Funds base growth.
