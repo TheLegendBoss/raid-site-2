@@ -33,6 +33,10 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 
 ## Terminology
 
-- **Carried**: loot held in the run; lost on death.
+- **Carried**: unequipped loot held in the run; lost on death.
 - **Stash**: banked loot; survives death. Reached by extracting.
-- **Clone**: the player's body. Death regrows it; the stash and claimed map persist.
+- **Clone**: the player's body. Death regrows it; the stash, equipped gear and claimed sites persist.
+- **Silo**: a randomly generated, disposable site with a clear ending (a Warden). The MVP test bed. Not connected to the network.
+- **Vault**: a connected, persistent site (generated once per save, with authored story rooms). Claiming one adds population and grows the base.
+- **Population**: sleepers woken from cryosleep in claimed vaults. Funds base growth.
+- **Equipped**: the four gear slots in use. Survive death, unlike carried loot.
