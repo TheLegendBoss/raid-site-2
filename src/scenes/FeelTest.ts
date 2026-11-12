@@ -848,6 +848,7 @@ export class FeelTest extends Phaser.Scene {
       this.sfx.empty();
     }
 
+    this.rig.setBladeOut(sw.state !== 'idle');
     if (sw.state === 'idle') {
       this.bladeGfx.clear();
       this.bladeGlow.setVisible(false);

@@ -38,6 +38,9 @@ export const TUNING = {
     recoil: 3.4, // px the carbine and helmet snap back per shot
     recoilRecover: 34,
     dashStretch: 1.12,
+    handX: 16.2, // left fist, in px from the clone's centre (art/clone.vx.js)
+    handY: -17.3,
+    swordRestRot: 3.4, // radians: reverse grip, blade carried back and out along the left side
   },
 
   gun: {

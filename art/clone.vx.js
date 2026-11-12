@@ -1,93 +1,121 @@
-// The clone, seen from above, facing +x (right). Every part is a 64x64 canvas centred on (32,32)
-// so the game can stack them at the same origin and animate by offsetting. Lighting is
-// radial/symmetric on purpose: the sprite rotates with the aim, so a baked top-left light would spin.
+// The clone, seen from above, facing +x (right). Heavy, blocky plate: chamfered slabs, no curves
+// where armour would be cast. One-handed SMG in the right hand (+y), arc blade in the left (-y).
+// Every part is a 64x64 canvas centred on (32,32) so the game stacks them at one origin and
+// animates by offsets. Lighting is radial/symmetric on purpose: the sprite rotates with the aim.
 pal({
-  k: "#03080a", rim: "#6dff8a",
+  k: "#03080a",
   a0: "#0b1716", a1: "#143028", a2: "#22524a", a3: "#37806f", a4: "#74d6b4",
-  gr: "#6dff8a", gd: "#2cae58",
   m0: "#12181b", m1: "#252e33", m2: "#40505a", m3: "#7690a0",
-  au: "#ffd36b", ao: "#ff9a3c",
+  gr: "#6dff8a", au: "#ffb347", rd: "#ff4d4d",
+  bl: "#7fe8ff", bw: "#eafcff",
 })
-ramps("a0 a1 a2 a3 a4")
 
-const C = 32
+// Chamfered rectangle: corners cut at 45 degrees. Returns poly points.
+const cr = (x, y, w, h, c) => [
+  x + c, y, x + w - c, y, x + w, y + c, x + w, y + h - c,
+  x + w - c, y + h, x + c, y + h, x, y + h - c, x, y + c,
+]
+const plate = (x, y, w, h, c, fill, extra = {}) => poly(cr(x, y, w, h, c), { fill, stroke: "k", sw: 1.3, ...extra })
+const edge = (x, y, w, h, c, col = "a4", o = 0.55) => poly(cr(x, y, w, h, c), { fill: "none", stroke: col, sw: 0.7, opacity: o })
+const rivet = (x, y) => circle(x, y, 0.95, { fill: "m3", stroke: "k", sw: 0.5 })
 
-// ---------- body: backpack, torso, pauldrons ----------
+// ---------- body: pack, torso, pauldrons ----------
 const pauldron = (s) => {
-  const y = C + s * 16
+  const cy = 32 + s * 17
   return [
-    // outer plate
-    rect(23, y - 6, 19, 12, { r: 5, fill: rad(["a3", "a2", "a1"], { cx: 0.5, cy: 0.5, r: 0.75 }), stroke: "k", sw: 1.4 }),
-    // raised rim and trim stripe
-    rect(25, y - 4, 15, 8, { r: 3.5, fill: "none", stroke: "a4", sw: 0.8, opacity: 0.7 }),
-    rect(27, y - 1.1, 11, 2.2, { r: 1, fill: "gr", glow: { r: 3, color: "gr", strength: 1 } }),
-    circle(40, y, 1.3, { fill: "m3", stroke: "k", sw: 0.6 }),
-    circle(25, y, 1.1, { fill: "m3", stroke: "k", sw: 0.6 }),
+    plate(21.5, cy - 8, 23, 16, 4.5, rad(["a3", "a2", "a1"], { cx: 0.5, cy: 0.5, r: 0.8 })),
+    plate(25, cy - 5.2, 14, 10.4, 3, rad(["a4", "a3", "a2"], { cx: 0.5, cy: 0.5, r: 0.9 }), { sw: 0.8 }),
+    edge(23.5, cy - 6.5, 19, 13, 3.5),
+    rect(40.2, cy - 6, 2.4, 12, { r: 0.6, fill: "au", stroke: "k", sw: 0.6 }),   // forward trim, amber
+    s < 0
+      ? [rect(27.5, cy - 2.2, 8, 1.4, { fill: "k", opacity: 0.55 }), rect(27.5, cy + 0.8, 8, 1.4, { fill: "k", opacity: 0.55 })]
+      : [rect(27.5, cy - 2.8, 1.4, 5.6, { fill: "k", opacity: 0.55 }), rect(30.5, cy - 2.8, 1.4, 5.6, { fill: "k", opacity: 0.55 }), rect(33.5, cy - 2.8, 1.4, 5.6, { fill: "k", opacity: 0.55 })],
+    rivet(23.8, cy - 5.6), rivet(23.8, cy + 5.6), rivet(38.4, cy - 5.6), rivet(38.4, cy + 5.6),
   ]
 }
 
 sprite("clone_body", { w: 64, h: 64 },
-  // power pack behind the shoulders
-  rect(11, 23, 14, 18, { r: 3.5, fill: lin(["m2", "m0"], 0), stroke: "k", sw: 1.4 }),
-  rect(13, 26, 8, 2, { r: 1, fill: "k" }),
-  rect(13, 30.5, 8, 2, { r: 1, fill: "k" }),
-  rect(13, 35, 8, 2, { r: 1, fill: "k" }),
-  rect(10.5, 29, 2.6, 6, { r: 1, fill: "gr", glow: { r: 4, color: "gr", strength: 2 } }),
-  // torso
-  blob([20, 32, 23, 23, 32, 19.5, 40, 23, 43, 32, 40, 41, 32, 44.5, 23, 41],
-    { fill: rad(["a3", "a2", "a0"], { cx: 0.55, cy: 0.5, r: 0.8 }), stroke: "k", sw: 1.4 }),
-  // chest plate: centre keel and a bright aquila-ish chevron
-  clip(blob([20, 32, 23, 23, 32, 19.5, 40, 23, 43, 32, 40, 41, 32, 44.5, 23, 41], "k"),
-    rect(33, 24, 3, 16, { fill: "a4", opacity: 0.35 }),
-    line([26, 27, 34, 32, 26, 37], { stroke: "a4", sw: 1.3, opacity: 0.8 }),
-    ellipse(36, 32, 7, 11, { fill: "a4", opacity: 0.12 })),
-  circle(38.5, 32, 1.6, { fill: "gr", glow: { r: 3, color: "gr", strength: 1.5 } }),
+  // power pack: boxy, ribbed, twin exhausts
+  plate(6.5, 21, 16, 22, 3.5, lin(["m2", "m0"], 0)),
+  rect(9, 25, 9, 1.6, { fill: "k" }), rect(9, 29.7, 9, 1.6, { fill: "k" }), rect(9, 34.4, 9, 1.6, { fill: "k" }),
+  rect(5.5, 28.5, 3, 7, { r: 1, fill: "gr", glow: { r: 4, color: "gr", strength: 2 } }),
+  circle(12, 22, 1.7, { fill: "m0", stroke: "m3", sw: 0.6 }), circle(12, 42, 1.7, { fill: "m0", stroke: "m3", sw: 0.6 }),
+  rect(20, 26.5, 4, 11, { fill: "m1", stroke: "k", sw: 1 }),
+  // torso: slab with a raised chest block and a core light
+  plate(19.5, 20.5, 25.5, 23, 5.5, rad(["a3", "a2", "a0"], { cx: 0.55, cy: 0.5, r: 0.85 })),
+  plate(27, 24.5, 14, 15, 3.5, rad(["a4", "a3", "a1"], { cx: 0.5, cy: 0.5, r: 0.8 }), { sw: 0.9 }),
+  edge(25.5, 23, 17, 18, 4),
+  line([27, 32, 41, 32], { stroke: "k", sw: 0.8, opacity: 0.5 }),
+  rect(34.4, 29.4, 5, 5.2, { r: 1.2, fill: "m1", stroke: "k", sw: 0.7 }),
+  circle(36.9, 32, 1.5, { fill: "gr", glow: { r: 3, color: "gr", strength: 1.6 } }),
+  rivet(29, 26.5), rivet(29, 37.5), rivet(39.5, 26.5), rivet(39.5, 37.5),
   pauldron(-1), pauldron(1))
 
-// ---------- helmet ----------
+// ---------- helmet: a blocky bucket with one wide visor ----------
 sprite("clone_head", { w: 64, h: 64 },
-  blob([24, 32, 26, 26, 32, 23, 38, 26, 41, 32, 38, 38, 32, 41, 26, 38],
-    { fill: rad(["a3", "a2", "a0"], { cx: 0.6, cy: 0.5, r: 0.75 }), stroke: "k", sw: 1.4 }),
-  // crest ridge front to back
-  line([26, 32, 38, 32], { stroke: "a1", sw: 2.2, opacity: 0.8 }),
-  line([26.5, 32, 37.5, 32], { stroke: "a4", sw: 0.8, opacity: 0.8 }),
-  // visor: a slit that glows
-  path("M 37.5 27 Q 41.5 32 37.5 37 L 36 36 Q 39 32 36 28 Z",
-    { fill: "gr", stroke: "k", sw: 0.5, glow: { r: 2.5, color: "gr", strength: 1.2 } }),
-  // rear vents
-  line([25, 29, 25, 35], { stroke: "k", sw: 1.1, opacity: 0.7 }))
+  plate(24.5, 24, 17, 16, 5, rad(["a3", "a2", "a0"], { cx: 0.6, cy: 0.5, r: 0.8 })),
+  edge(26, 25.5, 14, 13, 4, "a4", 0.5),
+  rect(27, 29, 8, 6, { r: 1.5, fill: "a1", stroke: "k", sw: 0.6, opacity: 0.8 }),             // crown plate
+  rect(37, 27.4, 4.4, 9.2, { r: 1.3, fill: "m0", stroke: "k", sw: 0.8 }),                     // visor housing
+  rect(37.9, 28.4, 3.2, 7.2, { r: 1, fill: "gr", glow: { r: 2.6, color: "gr", strength: 1.3 } }),
+  line([27.5, 26.2, 27.5, 28], { stroke: "k", sw: 0.9, opacity: 0.7 }), line([27.5, 36, 27.5, 37.8], { stroke: "k", sw: 0.9, opacity: 0.7 }),
+  rect(24, 30, 2.6, 4, { fill: "m1", stroke: "k", sw: 0.7 }))                                 // rear cable port
 
-// ---------- arms and carbine ----------
+// ---------- arms and one-handed SMG ----------
+// Armour blocks along a segment: butt-capped so they read as plates, not tubes.
+const seg = (pts, w, hi = true) => [
+  line(pts, { stroke: "k", sw: w + 1.6, cap: "butt", join: "miter" }),
+  line(pts, { stroke: "a2", sw: w, cap: "butt", join: "miter" }),
+  hi ? line(pts, { stroke: "a3", sw: w * 0.35, cap: "butt", join: "miter", opacity: 0.7 }) : null,
+]
+
+// The SMG is drawn level along y=39 from the grip at x=44, then angled in so the muzzle sits on the
+// aim line (x=63, y~32.5): that is where the game spawns bullets.
+const smg = () => tf({ rot: -19, origin: [44, 39] },
+  rect(44, 37, 9, 4.6, { r: 1, fill: lin(["m3", "m1"], 90), stroke: "k", sw: 1 }),             // receiver
+  rect(52, 37.4, 6, 3.8, { r: 0.8, fill: lin(["m2", "m0"], 90), stroke: "k", sw: 0.9 }),       // shroud
+  line([53.5, 38.4, 56.5, 38.4], { stroke: "k", sw: 0.7 }), line([53.5, 40.2, 56.5, 40.2], { stroke: "k", sw: 0.7 }),
+  rect(57.5, 38, 4.6, 3, { r: 0.6, fill: "m1", stroke: "k", sw: 0.8 }),                         // barrel + brake
+  rect(61.2, 37.6, 2.2, 3.8, { r: 0.5, fill: "m2", stroke: "k", sw: 0.8 }),
+  rect(40, 37.4, 5, 3.8, { r: 1, fill: "m1", stroke: "k", sw: 0.9 }),                           // folded stock block
+  rect(46, 35.6, 5.5, 2.2, { r: 0.6, fill: "m2", stroke: "k", sw: 0.7 }),                        // sight rail
+  circle(50.4, 36.7, 0.9, { fill: "rd", glow: { r: 2, color: "rd", strength: 1.4 } }),           // red dot
+  rect(47.5, 40.6, 2.6, 1.2, { r: 0.4, fill: "au" }))                                           // ejection port
+
 sprite("clone_arms", { w: 64, h: 64 },
-  // carbine, held right of centre (+y is the clone's right hand). Muzzle tip at x=63.
-  rect(28, 34, 11, 5, { r: 1.5, fill: lin(["m1", "m0"], 90), stroke: "k", sw: 1 }),         // stock
-  rect(37, 33, 13, 6.4, { r: 1.5, fill: lin(["m3", "m1"], 90), stroke: "k", sw: 1.2 }),      // receiver
-  rect(49, 34.2, 9, 4, { r: 1, fill: lin(["m2", "m0"], 90), stroke: "k", sw: 1 }),            // handguard
-  line([57, 36.2, 62, 36.2], { stroke: "m3", sw: 1.7 }),                                        // barrel
-  rect(60, 34.5, 3.6, 3.4, { r: 0.8, fill: "m1", stroke: "k", sw: 0.8 }),                       // muzzle brake
-  rect(39.5, 31.2, 8, 3.2, { r: 1, fill: "m2", stroke: "k", sw: 0.8 }),                         // optic body
-  circle(47.6, 32.8, 1.3, { fill: "gr", glow: { r: 2.5, color: "gr", strength: 1.2 } }),        // optic lens
-  rect(43.5, 38.2, 3, 1.4, { r: 0.5, fill: "au" }),                                             // ejection port
-  line([38, 35, 50, 35], { stroke: "m3", sw: 0.6, opacity: 0.8 }),
-  // right arm: shoulder to grip
-  line([34, 47, 40, 44, 42.5, 38], { stroke: "k", sw: 6.4 }),
-  line([34, 47, 40, 44, 42.5, 38], { stroke: "a2", sw: 4.8 }),
-  line([34, 47, 40, 44, 42.5, 38], { stroke: "a3", sw: 1.3, opacity: 0.6 }),
-  circle(42.8, 37.2, 3.1, { fill: "m1", stroke: "k", sw: 1 }),
-  // left arm: shoulder out and across to the handguard
-  line([36, 17, 47, 20, 53, 33], { stroke: "k", sw: 5.6 }),
-  line([36, 17, 47, 20, 53, 33], { stroke: "a2", sw: 4 }),
-  line([36, 17, 47, 20, 53, 33], { stroke: "a3", sw: 1.2, opacity: 0.6 }),
-  circle(53.2, 35, 3, { fill: "m1", stroke: "k", sw: 1 }))
+  // right arm to the gun: upper arm out of the pauldron, forearm bent in to the grip
+  seg([42, 49, 47, 47], 6.4), seg([47, 47, 49, 42.5], 5.6),
+  plate(45.4, 43.8, 4.2, 5.6, 1.3, "a3", { sw: 0.8 }),                                       // vambrace cap
+  smg(),
+  rect(46.6, 40, 5.6, 5, { r: 1.5, fill: "m1", stroke: "k", sw: 1 }),                        // gauntlet on the grip
+  // left arm, bent, holding the sword low at the side
+  seg([42, 15, 46, 13], 6.4), seg([46, 13, 47.5, 15.5], 5.6),
+  plate(43.6, 11.6, 4.4, 5.2, 1.3, "a3", { sw: 0.8 }),
+  rect(45.4, 12.2, 5.6, 5, { r: 1.5, fill: "m1", stroke: "k", sw: 1 }))                      // gauntlet on the hilt
+
+// ---------- arc blade ----------
+// Pivot (the hand) is the canvas centre (32,32); the blade points +x. The game rotates this part
+// about the hand: low and out at rest, following the swing arc while the blade is out.
+sprite("clone_sword", { w: 64, h: 64 },
+  rect(23, 30.2, 9, 3.6, { r: 1, fill: "m1", stroke: "k", sw: 0.9 }),                         // grip
+  rect(21.4, 29.4, 2.6, 5.2, { r: 0.8, fill: "au", stroke: "k", sw: 0.7 }),                   // pommel
+  rect(31.6, 27.6, 3.2, 8.8, { r: 0.8, fill: "m2", stroke: "k", sw: 0.9 }),                   // guard
+  poly([34.8, 30.4, 58, 30.7, 62.6, 32, 58, 33.3, 34.8, 33.6],
+    { fill: lin(["bw", "bl"], 90), stroke: "bl", sw: 0.8, glow: { r: 3, color: "bl", strength: 1.6 } }),
+  line([36, 32, 59, 32], { stroke: "bw", sw: 0.8, opacity: 0.9 }))
 
 // ---------- boots ----------
-sprite("clone_boot", { w: 16, h: 10 },
-  rect(1.5, 1.5, 13, 7, { r: 3, fill: lin(["m2", "m0"], 0), stroke: "k", sw: 1.2 }),
-  rect(9, 2.4, 4.4, 5.2, { r: 2, fill: "m3", opacity: 0.55 }),
-  line([3.5, 5, 7, 5], { stroke: "a3", sw: 1, opacity: 0.7 }))
+sprite("clone_boot", { w: 18, h: 11 },
+  poly(cr(1.5, 1.5, 15, 8, 2.6), { fill: lin(["m2", "m0"], 0), stroke: "k", sw: 1.2 }),
+  poly(cr(9.8, 2.5, 5.8, 6, 1.6), { fill: "m3", opacity: 0.5 }),
+  line([3.5, 4.2, 7.5, 4.2], { stroke: "a3", sw: 0.8, opacity: 0.8 }),
+  line([3.5, 6.6, 7.5, 6.6], { stroke: "a3", sw: 0.8, opacity: 0.8 }))
 
-// A look-at sheet (not used by the game): everything assembled, on the game's dark ground.
+// A look-at sheet (not used by the game): the rest pose assembled on the game's dark ground.
 scene("clone_assembled", { w: 96, h: 64, bg: "#05080a" },
-  tf({ x: 16 }, stamp("clone_boot", 28, 25, { anchor: "center" }), stamp("clone_boot", 38, 39, { anchor: "center" }),
-    stamp("clone_body", 32, 32, { anchor: "center" }), stamp("clone_arms", 32, 32, { anchor: "center" }),
+  tf({ x: 16 },
+    stamp("clone_boot", 28, 22, { anchor: "center" }), stamp("clone_boot", 38, 42, { anchor: "center" }),
+    stamp("clone_body", 32, 32, { anchor: "center" }),
+    tf({ x: 15, y: -20, rot: -40, origin: [32, 32] }, stamp("clone_sword", 32, 32, { anchor: "center" })),
+    stamp("clone_arms", 32, 32, { anchor: "center" }),
     stamp("clone_head", 32, 32, { anchor: "center" })))

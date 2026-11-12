@@ -5,7 +5,7 @@ import { TUNING } from '../data/tuning';
 
 const A = TUNING.art;
 
-export const CLONE_PARTS = ['clone_body', 'clone_head', 'clone_arms', 'clone_boot'] as const;
+export const CLONE_PARTS = ['clone_body', 'clone_head', 'clone_arms', 'clone_boot', 'clone_sword'] as const;
 
 export class PlayerRig {
   readonly root: Phaser.GameObjects.Container;
@@ -14,6 +14,7 @@ export class PlayerRig {
   private body: Phaser.GameObjects.Image;
   private arms: Phaser.GameObjects.Image;
   private head: Phaser.GameObjects.Image;
+  private sword: Phaser.GameObjects.Image;
   private parts: Phaser.GameObjects.Image[];
   private phase = 0;
   private recoil = 0;
@@ -24,9 +25,10 @@ export class PlayerRig {
     this.bootL = mk('clone_boot');
     this.bootR = mk('clone_boot');
     this.body = mk('clone_body');
+    this.sword = mk('clone_sword').setPosition(A.handX, A.handY).setRotation(A.swordRestRot);
     this.arms = mk('clone_arms');
     this.head = mk('clone_head');
-    this.parts = [this.bootL, this.bootR, this.body, this.arms, this.head];
+    this.parts = [this.bootL, this.bootR, this.body, this.sword, this.arms, this.head];
     this.root = scene.add.container(0, 0, this.parts).setDepth(depth);
     this.layout(0);
   }
@@ -51,6 +53,11 @@ export class PlayerRig {
     }
   }
 
+  /** The sprite blade is carried at rest; while the arc blade is out, the swing effect replaces it. */
+  setBladeOut(out: boolean): void {
+    this.sword.setVisible(!out);
+  }
+
   setDashing(on: boolean): void {
     this.root.setScale(on ? A.dashStretch : 1, on ? 1 / A.dashStretch : 1);
   }
@@ -70,5 +77,6 @@ export class PlayerRig {
     this.arms.x = -this.recoil;
     this.head.x = -this.recoil * 0.35;
     this.body.x = -this.recoil * 0.12;
+    this.sword.x = A.handX - this.recoil * 0.2;
   }
 }
