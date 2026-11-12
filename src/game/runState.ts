@@ -43,6 +43,15 @@ export interface RunState {
   bladeDeny: number;
 
   wave: number;
+  /** Waves in this room (0 = endless, the dev room). */
+  waveTotal: number;
+  /** '' in the dev room; otherwise e.g. 'FLOOR 2   ROOM 1 / 2'. */
+  roomLabel: string;
+  roomsDone: number;
+  roomsTotal: number;
+  bossName: string;
+  bossHp: number;
+  bossMax: number;
   mobsAlive: number;
   intermission: number; // seconds left, 0 if a wave is live
   damageFlash: number; // 0..1, decays
@@ -98,6 +107,13 @@ export const runState: RunState = {
   bladeDeny: 0,
 
   wave: 0,
+  waveTotal: 0,
+  roomLabel: '',
+  roomsDone: 0,
+  roomsTotal: 0,
+  bossName: '',
+  bossHp: 0,
+  bossMax: 0,
   mobsAlive: 0,
   intermission: 0,
   damageFlash: 0,

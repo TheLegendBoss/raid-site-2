@@ -140,50 +140,24 @@ export const TUNING = {
     resistSparks: 7, // sparks thrown when armour turns a round away
   },
 
-  scav: {
-    radius: 12,
-    hp: 22,
-    speed: 150,
-    speedJitter: 0.25,
-    contactRange: 30,
-    contactDamage: 8,
-    attackCooldown: 0.75,
-    separation: 24,
-    knockbackDecay: 9,
-    gunKnockback: 140,
-    lootChance: 0.34,
-  },
-
-  // Armour penetration against armour (Helldivers 2 style). Rows are AP minus the target's armour,
+  // Armour penetration against armour (Helldivers 2 style). Rows are AP minus the target's armour (MobDef.armour),
   // clamped to the table; values are the share of the damage that gets through.
   armour: {
-    scav: 0,
-    robot: 2,
     // diff <= -2, -1, 0, >= +1
     table: [0.35, 0.55, 0.8, 1],
   },
 
-  robot: {
-    radius: 21,
-    hp: 120,
-    staggerAt: 1, // stagger meter that triggers a stumble
-    staggerDecay: 1.4, // meter drained per second
-    staggerTime: 0.55, // seconds a gun-staggered robot stumbles
-    staggerImmune: 1.2, // seconds before it can be gun-staggered again
-    speed: 78,
-    preferredMin: 230,
-    preferredMax: 340,
-    telegraph: 0.6,
-    burstCount: 3,
-    burstGap: 0.1,
-    cooldownMin: 1.7,
-    cooldownMax: 2.6,
-    bulletSpeed: 430,
-    bulletDamage: 11,
-    bulletLife: 2.2,
-    gunKnockback: 25,
-    lootMinRarity: 1,
-    lootDrops: 2,
+  // Bunker runs: wave budgets and what a lift ride restores.
+  run: {
+    budgetBase: 8,
+    budgetPerDepth: 4,
+    budgetPerWave: 3,
+    firstSpawnDelay: 1.2,
+    spawnGap: 0.8, // seconds between non-swarm spawns
+    descendHeal: 0.35, // fraction of max hull restored on descending
+    descendAmmo: 0.5, // fraction of max reserve restored on descending
+    clearBonusItems: 1, // extra gear drops when the Warden falls, on top of its own
+    waveIntelPerRoom: 2, // a room's waves count this many extra waves per room index toward Intel
   },
 
   waves: {

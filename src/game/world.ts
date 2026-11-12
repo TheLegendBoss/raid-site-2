@@ -3,6 +3,7 @@
 // that systems fill (mobs, bullets, drops).
 import { W, H } from '../data/arena';
 import { TUNING as T } from '../data/tuning';
+import type { RoomPlan } from '../sim/run';
 import type { Bullet, Drop, Mob, Spawn, SwordState } from './types';
 
 export class World {
@@ -51,6 +52,15 @@ export class World {
   hotMag = false; // the current magazine was loaded with an active reload
 
   // room
+  /** The bunker room being played; null in the dev test room. */
+  room: RoomPlan | null = null;
+  hpMul = 1;
+  dmgMul = 1;
+  /** Waves that must be beaten before the exit pad opens. */
+  wavesToClear: number = T.extract.exitAfterWave;
+  bossDown = false;
+  /** Minimum rarity of the Warden's bonus drop. */
+  bossRarity = 2;
   wave = 0;
   waveLive = false;
   waveTimer = 1.2;

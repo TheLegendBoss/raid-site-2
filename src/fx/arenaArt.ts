@@ -1,6 +1,6 @@
 // Static arena art, drawn once.
 import Phaser from 'phaser';
-import { EXTRACTS, PILLARS, PIPES, W, H, X0, X1, Y0, Y1 } from '../data/arena';
+import { ARENA, EXTRACTS, PILLARS, PIPES, W, H, X0, X1, Y0, Y1 } from '../data/arena';
 import { PALETTE } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 
@@ -17,14 +17,25 @@ export function drawFloor(scene: Phaser.Scene): void {
     g.lineBetween(0, y, W, y);
   }
 
-  // Sewer channel across the middle.
-  g.fillStyle(0x08181b, 1);
-  g.fillRect(X0, 610, X1 - X0, 80);
-  g.lineStyle(2, PALETTE.structureDim, 0.9);
-  g.lineBetween(X0, 610, X1, 610);
-  g.lineBetween(X0, 690, X1, 690);
-  g.lineStyle(1, PALETTE.structureDim, 0.45);
-  for (let x = X0 + 10; x < X1 - 30; x += 64) g.lineBetween(x, 650, x + 26, 650);
+  if (ARENA.layout.channel) {
+    // Sewer channel across the middle.
+    g.fillStyle(0x08181b, 1);
+    g.fillRect(X0, 610, X1 - X0, 80);
+    g.lineStyle(2, PALETTE.structureDim, 0.9);
+    g.lineBetween(X0, 610, X1, 610);
+    g.lineBetween(X0, 690, X1, 690);
+    g.lineStyle(1, PALETTE.structureDim, 0.45);
+    for (let x = X0 + 10; x < X1 - 30; x += 64) g.lineBetween(x, 650, x + 26, 650);
+  }
+  if (ARENA.layout.id === 'sanctum') {
+    // The Warden's floor: concentric rings around where it walks in.
+    const c = ARENA.layout.boss;
+    g.lineStyle(2, PALETTE.robot, 0.25);
+    for (const r of [120, 220, 340]) g.strokeCircle(c.x, 650, r);
+    g.lineStyle(1, PALETTE.robot, 0.18);
+    g.lineBetween(X0, 650, X1, 650);
+    g.lineBetween(c.x, Y0, c.x, Y1);
+  }
 
   // Pipe mouths.
   for (const p of PIPES) {

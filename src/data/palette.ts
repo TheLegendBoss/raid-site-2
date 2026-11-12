@@ -8,6 +8,8 @@ export const PALETTE = {
   player: 0x6dff8a, // green: the clone
   hostile: 0xff5a4d, // red: scavengers
   robot: 0xd070ff, // violet: machines
+  acid: 0x9be34a, // green: spitters and their spit
+  ember: 0xff9d3c, // orange: brutes, bombers, the Warden's core
   loot: 0xffb347, // gold
   scrap: 0xd8cf9a, // loose scrap
   spark: 0xffe3a0,

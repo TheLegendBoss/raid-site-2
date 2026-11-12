@@ -2,7 +2,6 @@
 // the stash. Survives death and restarts (Research and Perks belong to the
 // programme, not to one Aug). `profile.stats` is what combat reads.
 import { BASE_BY_ID, SLOTS, type Slot } from '../data/items';
-import { STASH_SLOTS } from '../data/loot';
 import { INTEL, NODE_BY_ID } from '../data/tree';
 import {
   baseOf, buyPrice, dismantleIntel, isValidItem, makeItem, seedItemIds, sellValue, startingItems, type Item,
@@ -12,7 +11,7 @@ import { checkUnlock, initialUnlocked, sanitizeUnlocked, type UnlockCheck } from
 import { readSaveText, writeSaveText } from './host';
 import { runState } from './runState';
 
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 interface SaveFile {
   version: number;
@@ -23,6 +22,8 @@ interface SaveFile {
   equipped: Partial<Record<Slot, Item | null>>;
   /** Dismantled weapons per family: analysis progress for the Armoury. */
   analysis: Record<string, number>;
+  /** Bunkers whose Warden has fallen. */
+  claimed: string[];
 }
 
 export const profile: {
@@ -31,6 +32,7 @@ export const profile: {
   unlocked: Set<string>;
   equipped: Record<Slot, Item | null>;
   analysis: Record<string, number>;
+  claimed: Set<string>;
   stats: EffectiveStats;
 } = {
   intel: 0,
@@ -38,6 +40,7 @@ export const profile: {
   unlocked: initialUnlocked(),
   equipped: startingItems(),
   analysis: {},
+  claimed: new Set<string>(),
   stats: resolveStats(initialUnlocked(), { primary: null, blade: null, armour: null, pack: null }),
 };
 
@@ -82,12 +85,13 @@ export async function loadProfile(): Promise<void> {
     if (text) {
       const s = JSON.parse(text) as Partial<SaveFile>;
       // Version 1 saves (Intel and unlocks only, plus placeholder loot) migrate by keeping Intel and unlocks.
-      if (s.version === SAVE_VERSION || s.version === 1) {
+      // Version 2 saves lack the claimed bunkers.
+      if (s.version === SAVE_VERSION || s.version === 2 || s.version === 1) {
         profile.intel = typeof s.intel === 'number' && s.intel >= 0 ? Math.floor(s.intel) : 0;
         profile.unlocked = sanitizeUnlocked(Array.isArray(s.unlocked) ? s.unlocked : []);
-        if (s.version === SAVE_VERSION) {
+        if (s.version === SAVE_VERSION || s.version === 2) {
           profile.scrap = typeof s.scrap === 'number' && s.scrap >= 0 ? Math.floor(s.scrap) : 0;
-          const stash = Array.isArray(s.stash) ? s.stash.filter(isValidItem).slice(0, STASH_SLOTS) : [];
+          const stash = Array.isArray(s.stash) ? s.stash.filter(isValidItem) : [];
           runState.stash = stash;
           const kit = startingItems();
           const eq = {} as Record<Slot, Item | null>;
@@ -97,6 +101,7 @@ export async function loadProfile(): Promise<void> {
           }
           profile.equipped = eq;
           profile.analysis = s.analysis && typeof s.analysis === 'object' ? { ...s.analysis } : {};
+          profile.claimed = new Set(Array.isArray(s.claimed) ? s.claimed.filter((x): x is string => typeof x === 'string') : []);
           seedItemIds([...stash, ...Object.values(eq).filter((x): x is Item => !!x)]);
         }
       }
@@ -119,6 +124,7 @@ export function saveProfile(): void {
     stash: runState.stash,
     equipped: profile.equipped,
     analysis: profile.analysis,
+    claimed: [...profile.claimed],
   };
   void writeSaveText(JSON.stringify(s)).catch(() => undefined);
 }
@@ -158,8 +164,6 @@ const remove = (list: Item[], item: Item): boolean => {
   return true;
 };
 
-export const stashFull = (): boolean => runState.stash.length >= STASH_SLOTS;
-
 /** Equip an item from carried or stash. The item it replaces takes its place in that list. */
 export function equip(item: Item, from: Place): boolean {
   const slot = baseOf(item).slot;
@@ -176,7 +180,6 @@ export function equip(item: Item, from: Place): boolean {
 /** Move between carried and stash. Banking from the field is extraction; this is the base screen's version. */
 export function move(item: Item, from: Place): boolean {
   const to: Place = from === 'carried' ? 'stash' : 'carried';
-  if (to === 'stash' && stashFull()) return false;
   if (to === 'carried' && runState.carried.length >= profile.stats.carrySlots) return false;
   if (!remove(listOf(from), item)) return false;
   listOf(to).push(item);
@@ -208,7 +211,7 @@ export function dismantle(item: Item): number {
 
 export function canBuy(baseId: string, rarity: number): boolean {
   const b = BASE_BY_ID.get(baseId);
-  return !!b && profile.scrap >= buyPrice(b, rarity) && !stashFull();
+  return !!b && profile.scrap >= buyPrice(b, rarity);
 }
 
 /** Buy baseline gear from the quartermaster into the stash. */
@@ -221,16 +224,22 @@ export function buy(baseId: string, rarity: number): Item | null {
   return it;
 }
 
-/** Extraction: bank carried gear (as many as fit) and carried scrap. Returns how many items did not fit. */
+/** Extraction: bank everything carried (the stash has no cap) and carried scrap. */
 export function extractAll(): { items: number; left: number; scrap: number } {
-  let items = 0;
-  while (runState.carried.length > 0 && !stashFull()) {
-    runState.stash.push(runState.carried.shift()!);
-    items++;
-  }
+  const items = runState.carried.length;
+  runState.stash.push(...runState.carried);
+  runState.carried = [];
   const scrap = runState.carriedScrap;
   profile.scrap += scrap;
   runState.carriedScrap = 0;
   saveProfile();
-  return { items, left: runState.carried.length, scrap };
+  return { items, left: 0, scrap };
+}
+
+/** A bunker's Warden fell: mark it claimed. Returns true the first time. */
+export function claimBunker(id: string): boolean {
+  if (profile.claimed.has(id)) return false;
+  profile.claimed.add(id);
+  saveProfile();
+  return true;
 }

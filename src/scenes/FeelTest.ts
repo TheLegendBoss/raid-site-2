@@ -5,7 +5,7 @@
 // This scene is only the loop and the wiring. Rules and effects live in
 // src/game/systems/*, state in src/game/world.ts.
 import Phaser from 'phaser';
-import { H, SPAWN, W } from '../data/arena';
+import { H, SPAWN, W, applyLayout } from '../data/arena';
 import { PALETTE } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { getSfx } from '../fx/audio';
@@ -16,7 +16,8 @@ import { Particles } from '../fx/particles';
 import { PlayerRig } from '../fx/playerRig';
 import { Ctx } from '../game/ctx';
 import type { MissionResult } from '../game/mission';
-import { onStatsChanged, profile } from '../game/profile';
+import { addIntel, claimBunker, onStatsChanged, profile } from '../game/profile';
+import { advanceRun, currentRun, currentRoom, endRun } from '../game/run';
 import { resetVitals, runState, setBanner } from '../game/runState';
 import { BladeSystem } from '../game/systems/blade';
 import { CameraSystem } from '../game/systems/camera';
@@ -29,8 +30,9 @@ import { PlayerSystem } from '../game/systems/player';
 import type { KeyMap } from '../game/types';
 import { World } from '../game/world';
 import { Rng } from '../sim/math';
+import { MOBS } from '../data/mobs';
 
-const BULLET_POOL = 220;
+const BULLET_POOL = 360;
 
 export class FeelTest extends Phaser.Scene {
   private w = new World();
@@ -48,16 +50,31 @@ export class FeelTest extends Phaser.Scene {
 
   init(data: { mode?: 'dev' | 'mission'; missionId?: string }): void {
     this.mode = data.mode ?? 'dev';
-    this.missionId = data.missionId ?? 'dev';
+    const run = this.mode === 'mission' ? currentRun() : null;
+    // A mission without a run in progress (should not happen) falls back to the free-play room.
+    if (this.mode === 'mission' && !run) this.mode = 'dev';
+    this.missionId = run ? run.bunker.id : 'dev';
     this.ending = false;
     this.w = new World();
+    const room = run ? currentRoom() : null;
+    this.w.room = room;
+    if (run && room) {
+      this.w.hpMul = run.bunker.hpMul;
+      this.w.dmgMul = run.bunker.dmgMul;
+      this.w.wavesToClear = room.waves.length;
+      this.w.bossRarity = run.bunker.bossRarity;
+    }
+    applyLayout(room ? room.layout : 'crossroads');
   }
 
   create(): void {
     runState.devMode = this.mode === 'dev';
-    runState.carried = [];
-    runState.carriedScrap = 0;
-    this.startIntel = profile.intel;
+    // A dev room starts empty-handed; a bunker room keeps what the run has picked up so far.
+    if (this.mode === 'dev') {
+      runState.carried = [];
+      runState.carriedScrap = 0;
+    }
+    this.startIntel = currentRun()?.startIntel ?? profile.intel;
     const g = new Ctx(this, this.w, getSfx(), new Rng((Date.now() ^ 0x9e3779b9) >>> 0));
     this.g = g;
     this.w = g.w;
@@ -205,6 +222,13 @@ export class FeelTest extends Phaser.Scene {
     this.w.prevDashReady = s.dashReady;
     this.w.prevBladeReady = s.bladeReady;
     s.wave = this.w.wave;
+    const room = this.w.room;
+    s.waveTotal = room ? room.waves.length : 0;
+    s.roomLabel = room ? `FLOOR ${room.floor}   ROOM ${room.roomOnFloor}/${room.roomsOnFloor}   #${room.index + 1}/${currentRun()!.plan.rooms.length}` : '';
+    const boss = this.w.mobs.find((m) => m.kind === 'warden' && !m.dead);
+    s.bossName = boss ? MOBS.warden.name.toUpperCase() : '';
+    s.bossHp = boss ? Math.max(0, boss.hp) : 0;
+    s.bossMax = boss ? boss.maxHp : 0;
     s.mobsAlive = this.w.mobs.filter((m) => !m.dead).length + this.w.spawnQueue.length;
     s.intermission = this.w.waveLive ? 0 : Math.max(0, this.w.waveTimer);
     s.aimSpread = profile.stats.spread + this.w.bloom;
@@ -235,8 +259,19 @@ export class FeelTest extends Phaser.Scene {
     this.scene.start('Title');
   }
 
-  /** Leave the room for the base. Extracting banks the haul; dying or aborting loses what was carried. */
-  private endMission(outcome: MissionResult['outcome'], banked?: { items: number; scrap: number }): void {
+  /** Take the exit pad down to the next room. Same scene, new room: the run module carries the state across. */
+  private descend(): void {
+    if (this.ending) return;
+    const next = advanceRun(T.run.descendHeal, T.run.descendAmmo);
+    if (!next) return;
+    this.ending = true;
+    this.g.sfx.pickup(3);
+    this.cameras.main.fadeOut(380, 2, 6, 8);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('FeelTest', { mode: 'mission' }));
+  }
+
+  /** Leave the bunker for the base. Extracting banks the haul; dying or aborting loses what was carried. */
+  private endMission(outcome: MissionResult['outcome'], banked?: { items: number; scrap: number }, complete = false): void {
     if (this.ending) return;
     this.ending = true;
     let lost = 0;
@@ -246,6 +281,15 @@ export class FeelTest extends Phaser.Scene {
       runState.carried = [];
       runState.carriedScrap = 0;
     }
+    const run = currentRun();
+    let bonusScrap = 0;
+    let bonusIntel = 0;
+    if (run && outcome === 'extracted' && complete) {
+      bonusScrap = run.bunker.clear.scrap;
+      profile.scrap += bonusScrap;
+      bonusIntel = addIntel(run.bunker.clear.intel);
+      claimBunker(run.bunker.id);
+    }
     const result: MissionResult = {
       missionId: this.missionId,
       outcome,
@@ -254,7 +298,13 @@ export class FeelTest extends Phaser.Scene {
       lost,
       intel: Math.max(0, profile.intel - this.startIntel),
       wave: this.w.wave,
+      rooms: run ? run.roomsCleared + (complete ? 1 : 0) : 0,
+      roomsTotal: run ? run.plan.rooms.length : 0,
+      complete,
+      bonusScrap,
+      bonusIntel,
     };
+    endRun();
     this.scene.stop('Hud');
     this.cameras.main.fadeOut(outcome === 'lost' ? 500 : 350, 2, 6, 8);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Base', { mode: 'hub', result }));
@@ -278,8 +328,10 @@ export class FeelTest extends Phaser.Scene {
     if (K.JustDown(this.g.keys.M)) this.g.sfx.setMuted(!this.g.sfx.muted);
     if (K.JustDown(this.g.keys.ESC)) return this.openPause();
     if (K.JustDown(this.g.keys.X) && this.g.extractSys.canExtract()) {
+      const pad = this.g.extractSys.padUnder()!;
+      if (this.mode === 'mission' && this.g.extractSys.action(pad) === 'descend') return this.descend();
       const r = this.g.lootSys.extract();
-      if (this.mode === 'mission' && (!r || r.left === 0)) this.endMission('extracted', r ?? undefined);
+      if (this.mode === 'mission') this.endMission('extracted', r ?? undefined, pad.id === 'exit' && !!this.w.room?.final);
     }
     if (this.mode !== 'dev') return;
     if (K.JustDown(this.g.keys.ONE)) this.g.mobSys.queueSwarm(T.waves.swarmSize);
@@ -328,12 +380,17 @@ export class FeelTest extends Phaser.Scene {
     this.w.dead = false;
     this.w.wave = 0;
     this.w.waveLive = false;
-    this.w.waveTimer = first ? 1.4 : 2;
-    resetVitals();
+    this.w.waveTimer = this.w.room ? 2.4 : first ? 1.4 : 2;
+    if (this.mode === 'dev') resetVitals();
     this.g.rig.setVisible(true);
     this.g.shieldGfx.setVisible(true);
     this.g.floor.clear();
     this.g.floor.render();
-    if (!first) setBanner('CLONE REGROWN', 1.6);
+    if (this.w.room) {
+      const r = this.w.room;
+      setBanner(r.final ? `FLOOR ${r.floor}   THE WARDEN` : `FLOOR ${r.floor}   ROOM ${r.roomOnFloor} / ${r.roomsOnFloor}`, 2.2);
+    } else if (!first) {
+      setBanner('CLONE REGROWN', 1.6);
+    }
   }
 }

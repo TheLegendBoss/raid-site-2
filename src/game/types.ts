@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import type { MobDef, MobKind } from '../data/mobs';
 import type { Item } from '../sim/loot';
 
 export type KeyName =
@@ -6,12 +7,13 @@ export type KeyName =
   | 'SHIFT' | 'SPACE' | 'F' | 'X' | 'R' | 'K' | 'M' | 'T' | 'H' | 'ONE' | 'TWO' | 'TAB' | 'B' | 'ESC';
 export type KeyMap = Record<KeyName, Phaser.Input.Keyboard.Key>;
 
-export type MobKind = 'scav' | 'robot';
-export type Phase = 'move' | 'telegraph' | 'burst';
+export type { MobKind };
+export type Phase = 'move' | 'telegraph' | 'burst' | 'windup' | 'charge' | 'recover';
 export type Source = 'gun' | 'sword';
 
 export interface Mob {
   kind: MobKind;
+  def: MobDef;
   gfx: Phaser.GameObjects.Graphics;
   bar?: Phaser.GameObjects.Graphics;
   x: number;
@@ -39,6 +41,14 @@ export interface Mob {
   shotCd: number;
   aimAngle: number;
   strafe: number;
+  /** Enemy damage scale for this bunker. */
+  dmgMul: number;
+  // The Warden
+  bossStage: number;
+  bossAtk: string;
+  bossCd: number;
+  bossSpin: number;
+  hitDone: boolean; // this charge or leap already connected
 }
 
 export interface Bullet {

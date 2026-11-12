@@ -1,15 +1,18 @@
-// Extract pads: the floor's entry (always open) and its exit (opens once the floor is beaten).
-// Extraction only works while standing on an open pad. Pad art is static (arenaArt); this system
+// Pads: a room's entry and its exit. In a bunker the entry is a lift only in the first room of a floor
+// (it extracts); the exit opens once the room's waves are beaten and descends, or on the last room,
+// extracts with the run complete. In the dev room the entry is always open and the exit opens after a few waves.
+// Standing on an open pad is required. Pad art is static (arenaArt); this system
 // owns the small state overlay (open/sealed ring, the pulse while you stand on one) and redraws it
 // only when that state changes.
 import Phaser from 'phaser';
-import { EXTRACTS } from '../../data/arena';
+import { EXTRACTS, type PadDef } from '../../data/arena';
 import { PALETTE } from '../../data/palette';
 import { TUNING as T } from '../../data/tuning';
 import type { Ctx } from '../ctx';
 import { pushFeed, runState } from '../runState';
 
-type Pad = (typeof EXTRACTS)[number];
+type Pad = PadDef;
+export type PadAction = 'extract' | 'descend';
 
 export class ExtractSystem {
   private gfx: Phaser.GameObjects.Graphics;
@@ -35,8 +38,27 @@ export class ExtractSystem {
     return this.w.waveLive ? this.w.wave - 1 : this.w.wave;
   }
 
+  private wavesLeft(): number {
+    return Math.max(0, this.w.wavesToClear - this.wavesCleared());
+  }
+
   isOpen(pad: Pad): boolean {
-    return pad.id === 'entry' || this.wavesCleared() >= T.extract.exitAfterWave;
+    if (pad.id === 'entry') return !this.w.room || this.w.room.elevator;
+    return this.wavesLeft() === 0 && !this.w.waveLive;
+  }
+
+  /** What using the pad under the player does. */
+  action(pad: Pad): PadAction {
+    if (pad.id === 'exit' && this.w.room && !this.w.room.final) return 'descend';
+    return 'extract';
+  }
+
+  private openPrompt(pad: Pad): string {
+    const room = this.w.room;
+    if (!room) return `[X] EXTRACT  (${pad.label})`;
+    if (pad.id === 'entry') return '[X] EXTRACT  (LIFT)';
+    if (room.final) return '[X] EXTRACT  (RUN COMPLETE)';
+    return room.roomOnFloor < room.roomsOnFloor ? '[X] DESCEND  (NEXT ROOM)' : `[X] DESCEND  (FLOOR ${room.floor + 1})`;
   }
 
   /** The pad under the player, if any. */
@@ -57,7 +79,7 @@ export class ExtractSystem {
       return false;
     }
     if (!this.isOpen(pad)) {
-      pushFeed(`Exit sealed: clear ${T.extract.exitAfterWave - this.wavesCleared()} more wave(s)`, PALETTE.hostile);
+      pushFeed(pad.id === 'entry' ? 'No way back up from here.' : `Exit sealed: clear ${this.wavesLeft()} more wave(s)`, PALETTE.hostile);
       this.g.sfx.empty();
       return false;
     }
@@ -67,10 +89,11 @@ export class ExtractSystem {
   update(dt: number): void {
     const under = this.padUnder();
     const exitOpen = this.isOpen(EXTRACTS[1]);
-    const key = `${under?.id ?? ''}:${exitOpen}`;
+    const entryOpen = this.isOpen(EXTRACTS[0]);
+    const key = `${under?.id ?? ''}:${exitOpen}:${entryOpen}`;
     if (key !== this.drawnKey) {
       this.drawnKey = key;
-      this.redraw(under, exitOpen);
+      this.redraw(under, exitOpen, entryOpen);
     }
     // The pulse under your feet is a tween on an image, not a Graphics redraw.
     this.pulse += dt * 4;
@@ -78,24 +101,33 @@ export class ExtractSystem {
       const open = this.isOpen(e);
       const on = under?.id === e.id;
       const base = open ? 0.1 : 0.03;
-      this.glows[i].setTint(open ? PALETTE.structure : PALETTE.hostile);
+      this.glows[i].setPosition(e.x, e.y);
+      this.glows[i].setTint(open ? PALETTE.structure : e.id === 'entry' ? PALETTE.structureDim : PALETTE.hostile);
       this.glows[i].setAlpha(on && open ? base + 0.14 + Math.sin(this.pulse) * 0.08 : base);
     });
     runState.extractOpen = !!under && this.isOpen(under);
     runState.extractPrompt = !under
       ? ''
       : this.isOpen(under)
-        ? `[X] EXTRACT  (${under.label})`
-        : `EXIT SEALED  clear ${T.extract.exitAfterWave - this.wavesCleared()} more wave(s)`;
+        ? this.openPrompt(under)
+        : under.id === 'entry'
+          ? ''
+          : `EXIT SEALED  clear ${this.wavesLeft()} more wave(s)`;
   }
 
-  private redraw(under: Pad | null, exitOpen: boolean): void {
+  private redraw(under: Pad | null, exitOpen: boolean, entryOpen: boolean): void {
     const g = this.gfx;
     g.clear();
     const r = T.extract.padRadius;
     for (const e of EXTRACTS) {
-      const open = e.id === 'entry' || exitOpen;
+      const open = e.id === 'entry' ? entryOpen : exitOpen;
       const on = under?.id === e.id;
+      if (e.id === 'entry' && !entryOpen) {
+        // A lift you came down in: spent, not a threat.
+        g.lineStyle(2, PALETTE.structureDim, 0.5);
+        g.strokeCircle(e.x, e.y, r + 6);
+        continue;
+      }
       g.lineStyle(on ? 5 : 3, open ? PALETTE.structure : PALETTE.hostile, open ? (on ? 1 : 0.7) : 0.6);
       g.strokeCircle(e.x, e.y, r + 6);
       if (!open) {

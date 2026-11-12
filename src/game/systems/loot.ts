@@ -1,5 +1,5 @@
 import { TUNING as T } from '../../data/tuning';
-import { extractAll, profile, stashFull } from '../profile';
+import { extractAll, profile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE, RARITY_COLORS } from '../../data/palette';
 import { X0, X1, Y0, Y1 } from '../../data/arena';
@@ -129,7 +129,6 @@ export class LootSystem {
     const r = extractAll();
     if (r.items > 0) pushFeed(`Extracted ${r.items} item${r.items > 1 ? 's' : ''} to the stash`, PALETTE.structure);
     if (r.scrap > 0) pushFeed(`Banked ${r.scrap} scrap`, PALETTE.scrap);
-    if (r.left > 0) pushFeed(stashFull() ? `Stash full: ${r.left} still carried` : `${r.left} still carried`, PALETTE.hostile);
     setBanner('EXTRACTED', 1.4);
     this.g.sfx.pickup(5);
     this.g.ring(this.w.px, this.w.py, PALETTE.structure, 0.6, 7);

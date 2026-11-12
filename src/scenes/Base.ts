@@ -1,24 +1,27 @@
-// The base. In 'hub' mode it is the screen between deployments: outfit your Aug, pick a mission,
-// open the research and perk trees, deploy. In 'overlay' mode (dev test only) it opens over the
-// paused room with B and shows just the outfit page, including carried items.
+// The base. In 'hub' mode it is the screen between deployments: a menu (Perks, Research,
+// Quartermaster, Armory, Deploy) and the pages behind it. In 'overlay' mode (dev test only) it opens
+// over the paused room with B and shows just the outfit page, including carried items.
 //
-// Rules shown on the outfit page (design 5.5 and 6):
+// Rules shown on the armory page (design 5.5 and 6):
 //  - equip from carried or stash; the replaced item takes its place;
 //  - sell and dismantle only work on stashed items: the payout counts once you are back;
+//  - the stash has no cap;
 //  - the quartermaster sells baseline gear (Common and Uncommon) for Scrap.
+//
+// Deploy is one screen: swap gear on the left, choose a bunker on the right, go.
 //
 // Everything is clickable. The screen is drawn in immediate mode: render() rebuilds the labels when
 // state changes, and hover is a separate overlay so moving the mouse never rebuilds text.
 import Phaser from 'phaser';
 import { FONT, PALETTE, RARITY_COLORS, hex } from '../data/palette';
 import { BASE_ITEMS, SLOTS, SLOT_LABELS, type BaseItem, type Slot } from '../data/items';
-import { MISSIONS } from '../data/missions';
-import { QM, RARITY_LABELS, STASH_SLOTS } from '../data/loot';
+import { BUNKERS } from '../data/missions';
+import { QM, RARITY_LABELS } from '../data/loot';
+import { MOBS } from '../data/mobs';
 import { getSfx, type Sfx } from '../fx/audio';
-import {
-  buy, canBuy, dismantle, equip, move, profile, sell, stashFull, type Place,
-} from '../game/profile';
+import { buy, canBuy, dismantle, equip, move, profile, sell, type Place } from '../game/profile';
 import type { MissionResult } from '../game/mission';
+import { beginRun } from '../game/run';
 import { runState } from '../game/runState';
 import { TUNING as T } from '../data/tuning';
 import { statLines, type StatLine } from '../sim/describe';
@@ -30,12 +33,19 @@ import { snapFont, snapText, uiIcon, uiPanel, type PanelKind } from '../ui/pixel
 
 type Txt = Phaser.GameObjects.Text;
 type Mode = 'hub' | 'overlay';
-type Page = 'outfit' | 'missions';
+type Page = 'home' | 'armory' | 'quartermaster' | 'deploy';
 type TabId = 'carried' | 'stash' | 'shop';
+type Focus = 'loadout' | 'bunker';
 
 interface Row {
   item?: Item; // carried or stash
   shop?: { base: BaseItem; rarity: number };
+}
+
+/** A gear candidate on the deploy screen. `from` is null for the item already equipped. */
+interface Cand {
+  item: Item;
+  from: Place | null;
 }
 
 interface Btn {
@@ -57,26 +67,40 @@ interface Hit {
   enabled?: boolean;
 }
 
-const HEADER_H = 84;
+interface HomeEntry {
+  id: 'perks' | 'research' | 'quartermaster' | 'armory' | 'deploy';
+  label: string;
+  key: string;
+  sub: () => string;
+}
+
+const HEADER_H = 64;
 const FOOTER_H = 44;
 const LEFT_W = 330;
 const RIGHT_W = 380;
 const BTN_GAP = 6; // gap between the detail panel's action buttons
 const ROW_H = 40;
-const PAGES: { id: Page | 'research' | 'perks'; label: string }[] = [
-  { id: 'outfit', label: 'OUTFIT' },
-  { id: 'missions', label: 'MISSIONS' },
-  { id: 'research', label: 'RESEARCH' },
-  { id: 'perks', label: 'PERKS' },
+
+const HOME: readonly HomeEntry[] = [
+  { id: 'perks', label: 'PERKS', key: 'P', sub: () => 'Spend Intel on lasting bonuses' },
+  { id: 'research', label: 'RESEARCH', key: 'R', sub: () => 'Unlock new capabilities' },
+  { id: 'quartermaster', label: 'QUARTERMASTER', key: 'Q', sub: () => `Buy baseline gear.  ${profile.scrap} scrap` },
+  { id: 'armory', label: 'ARMORY', key: 'A', sub: () => `Your stash: ${runState.stash.length} item${runState.stash.length === 1 ? '' : 's'}. Equip, sell, dismantle` },
+  { id: 'deploy', label: 'DEPLOY', key: 'D', sub: () => 'Choose your gear, then a bunker' },
 ];
 
 export class Base extends Phaser.Scene {
   private sfx!: Sfx;
   private mode: Mode = 'hub';
-  private page: Page = 'outfit';
+  private page: Page = 'home';
   private tab: TabId = 'stash';
   private slotFilter: Slot | null = null;
-  private missionSel = 0;
+  private homeSel = 4;
+  private bunkerSel = 0;
+  private depSlot: Slot = 'primary';
+  private depSel = 0;
+  private depFocus: Focus = 'bunker';
+  private depList: Cand[] = [];
   private result: MissionResult | null = null;
   private sel = 0;
   private scroll = 0;
@@ -84,7 +108,7 @@ export class Base extends Phaser.Scene {
   private pendingConfirm = '';
   private toast = '';
   private toastColor: number = PALETTE.text;
-  private deploying = false;
+  private leaving = false;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private dyn: Phaser.GameObjects.GameObject[] = [];
   private gfx!: Phaser.GameObjects.Graphics;
@@ -102,15 +126,19 @@ export class Base extends Phaser.Scene {
     this.mode = data.mode ?? 'hub';
     this.sfx = data.sfx ?? getSfx();
     this.result = data.result ?? null;
-    this.page = data.page ?? (this.result ? 'missions' : 'outfit');
+    this.page = this.mode === 'overlay' ? 'armory' : data.page ?? 'home';
     this.slotFilter = null;
-    this.tab = this.mode === 'overlay' ? 'carried' : runState.stash.length > 0 ? 'stash' : 'shop';
+    this.tab = this.mode === 'overlay' ? 'carried' : 'stash';
     this.sel = 0;
     this.scroll = 0;
-    this.missionSel = 0;
+    this.homeSel = 4;
+    this.bunkerSel = 0;
+    this.depSlot = 'primary';
+    this.depSel = 0;
+    this.depFocus = 'bunker';
     this.pendingConfirm = '';
     this.toast = '';
-    this.deploying = false;
+    this.leaving = false;
     this.hover = '';
   }
 
@@ -120,7 +148,7 @@ export class Base extends Phaser.Scene {
     this.gfx = this.add.graphics().setDepth(1);
     this.hoverGfx = this.add.graphics().setDepth(4);
     this.keys = this.input.keyboard!.addKeys(
-      'UP,DOWN,LEFT,RIGHT,ENTER,SPACE,E,M,S,D,R,P,O,ONE,TWO,THREE,TAB,ESC,B',
+      'UP,DOWN,LEFT,RIGHT,ENTER,SPACE,E,M,S,D,R,P,O,Q,A,ONE,TWO,THREE,FOUR,FIVE,TAB,ESC,B',
     ) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on('pointerdown', this.onClick, this);
     this.input.on('pointermove', this.onMove, this);
@@ -151,10 +179,11 @@ export class Base extends Phaser.Scene {
   // ------------------------------------------------------------------
 
   private tabs(): { id: TabId; label: string }[] {
+    if (this.mode === 'hub' && this.page === 'quartermaster') return [{ id: 'shop', label: 'BASELINE GEAR' }];
     const out: { id: TabId; label: string }[] = [];
     if (this.mode === 'overlay' || runState.carried.length > 0) out.push({ id: 'carried', label: `CARRIED ${runState.carried.length}/${profile.stats.carrySlots}` });
-    out.push({ id: 'stash', label: `STASH ${runState.stash.length}/${STASH_SLOTS}` });
-    out.push({ id: 'shop', label: 'QUARTERMASTER' });
+    out.push({ id: 'stash', label: `STASH ${runState.stash.length}` });
+    if (this.mode === 'overlay') out.push({ id: 'shop', label: 'QUARTERMASTER' });
     return out;
   }
 
@@ -168,6 +197,20 @@ export class Base extends Phaser.Scene {
       for (let r = 0; r <= QM.maxRarity; r++) out.push({ shop: { base, rarity: r } });
     }
     return out;
+  }
+
+  /** Everything that can go in a slot: what is equipped first, then the rest by rarity. */
+  private buildCands(): Cand[] {
+    const slot = this.depSlot;
+    const out: Cand[] = [];
+    const eq = profile.equipped[slot];
+    if (eq) out.push({ item: eq, from: null });
+    const others: Cand[] = [
+      ...runState.stash.map((item) => ({ item, from: 'stash' as Place })),
+      ...runState.carried.map((item) => ({ item, from: 'carried' as Place })),
+    ].filter((c) => baseOf(c.item).slot === slot);
+    others.sort((a, b) => b.item.rarity - a.item.rarity || baseOf(a.item).name.localeCompare(baseOf(b.item).name));
+    return out.concat(others);
   }
 
   private current(): Row | undefined {
@@ -197,19 +240,23 @@ export class Base extends Phaser.Scene {
     const item = row.item!;
     const from: Place = this.tab === 'stash' ? 'stash' : 'carried';
     const inStash = from === 'stash';
-    return [
-      { key: 'E', label: 'EQUIP', enabled: true, run: () => this.doEquip(item, from) },
-      {
+    const out: Btn[] = [{ key: 'E', label: 'EQUIP', enabled: true, run: () => this.doEquip(item, from) }];
+    // The pack only matters in the dev room: a bunker run starts with an empty one.
+    if (this.mode === 'overlay') {
+      out.push({
         key: 'M', label: inStash ? 'TAKE' : 'STASH',
-        enabled: inStash ? runState.carried.length < profile.stats.carrySlots : !stashFull(),
+        enabled: inStash ? runState.carried.length < profile.stats.carrySlots : true,
         run: () => this.doMove(item, from),
-      },
+      });
+    }
+    out.push(
       { key: 'S', label: `SELL  ${sellValue(item)}`, enabled: inStash, run: () => this.confirmed('sell', item, () => this.doSell(item)) },
       {
         key: 'D', label: `DISMANTLE  +${dismantleIntel(item)}`, enabled: inStash,
         run: () => this.confirmed('dismantle', item, () => this.doDismantle(item)),
       },
-    ];
+    );
+    return out;
   }
 
   /** Valuable items need the action twice. */
@@ -239,7 +286,7 @@ export class Base extends Phaser.Scene {
 
   private doMove(item: Item, from: Place): void {
     if (!move(item, from)) {
-      this.say(from === 'carried' ? 'Stash is full' : 'Pack is full', PALETTE.hostile);
+      this.say('Pack is full', PALETTE.hostile);
       this.sfx.empty();
     } else {
       this.say(from === 'carried' ? 'Moved to the stash' : 'Taken into the pack');
@@ -266,7 +313,7 @@ export class Base extends Phaser.Scene {
   private doBuy(base: BaseItem, rarity: number): void {
     const it = buy(base.id, rarity);
     if (!it) {
-      this.say(stashFull() ? 'Stash is full' : 'Not enough scrap', PALETTE.hostile);
+      this.say('Not enough scrap', PALETTE.hostile);
       this.sfx.empty();
     } else {
       this.say(`Bought ${RARITY_LABELS[rarity]} ${base.name} (in the stash)`, RARITY_COLORS[rarity]);
@@ -277,11 +324,13 @@ export class Base extends Phaser.Scene {
 
   private deny(b: Btn): void {
     this.sfx.empty();
-    if (b.key === 'S' || b.key === 'D') this.say('Bank it in the stash first: only stashed items can be sold or dismantled.', PALETTE.hostile);
-    else if (b.key === 'M') this.say(this.tab === 'stash' ? 'Your pack is full.' : 'The stash is full.', PALETTE.hostile);
-    else if (b.key === 'ENTER') this.say(stashFull() ? 'The stash is full.' : 'Not enough scrap.', PALETTE.hostile);
+    if (b.key === 'S' || b.key === 'D') this.say('Only stashed items can be sold or dismantled.', PALETTE.hostile);
+    else if (b.key === 'M') this.say('Your pack is full.', PALETTE.hostile);
+    else if (b.key === 'ENTER') this.say('Not enough scrap.', PALETTE.hostile);
     this.render();
   }
+
+  // ---- navigation ---------------------------------------------------------------------------
 
   private setPage(p: Page): void {
     if (p === this.page) return;
@@ -289,6 +338,15 @@ export class Base extends Phaser.Scene {
     this.result = null;
     this.pendingConfirm = '';
     this.toast = '';
+    this.slotFilter = null;
+    this.sel = 0;
+    this.scroll = 0;
+    if (p === 'armory') this.tab = runState.carried.length > 0 ? 'carried' : 'stash';
+    if (p === 'quartermaster') this.tab = 'shop';
+    if (p === 'deploy') {
+      this.depSel = 0;
+      this.depFocus = 'bunker';
+    }
     this.sfx.step();
     this.render();
   }
@@ -300,24 +358,30 @@ export class Base extends Phaser.Scene {
     this.scene.bringToTop('Tree');
   }
 
+  private activate(id: HomeEntry['id']): void {
+    if (id === 'perks' || id === 'research') this.openTree(id);
+    else this.setPage(id);
+  }
+
   private deploy(): void {
-    const m = MISSIONS[this.missionSel];
-    if (this.deploying) return;
-    if (m.locked) {
+    const b = BUNKERS[this.bunkerSel];
+    if (this.leaving) return;
+    if (b.locked) {
       this.sfx.empty();
-      this.say(m.locked, PALETTE.hostile);
+      this.say(b.locked, PALETTE.hostile);
       this.render();
       return;
     }
-    this.deploying = true;
+    if (!beginRun(b.id)) return;
+    this.leaving = true;
     this.sfx.pickup(4);
     this.cameras.main.fadeOut(350, 2, 6, 8);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('FeelTest', { mode: 'mission', missionId: m.id }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('FeelTest', { mode: 'mission' }));
   }
 
   private toTitle(): void {
-    if (this.deploying) return;
-    this.deploying = true;
+    if (this.leaving) return;
+    this.leaving = true;
     this.cameras.main.fadeOut(220, 2, 6, 8);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Title'));
   }
@@ -328,12 +392,17 @@ export class Base extends Phaser.Scene {
     this.scene.stop();
   }
 
+  private back(): void {
+    if (this.page === 'home') this.toTitle();
+    else this.setPage('home');
+  }
+
   // ------------------------------------------------------------------
   // Input
   // ------------------------------------------------------------------
 
   update(): void {
-    if (this.deploying) return;
+    if (this.leaving) return;
     const K = Phaser.Input.Keyboard;
     const k = this.keys;
     if (this.mode === 'overlay') {
@@ -344,35 +413,111 @@ export class Base extends Phaser.Scene {
         this.scene.bringToTop('Tree');
         return;
       }
-    } else {
-      if (K.JustDown(k.ESC)) return this.toTitle();
-      if (K.JustDown(k.TAB)) return this.setPage(this.page === 'outfit' ? 'missions' : 'outfit');
-      if (K.JustDown(k.R)) return this.openTree('research');
-      if (K.JustDown(k.P)) return this.openTree('perks');
+      return this.updateList();
     }
-    if (this.page === 'missions') return this.updateMissions();
-    this.updateOutfit();
+    if (K.JustDown(k.ESC)) return this.back();
+    if (this.page === 'home') return this.updateHome();
+    if (this.page === 'deploy') return this.updateDeploy();
+    this.updateList();
   }
 
-  private updateMissions(): void {
+  private updateHome(): void {
     const K = Phaser.Input.Keyboard;
     const k = this.keys;
-    if (K.JustDown(k.UP)) this.selectMission(this.missionSel - 1);
-    if (K.JustDown(k.DOWN)) this.selectMission(this.missionSel + 1);
-    if (K.JustDown(k.ENTER) || K.JustDown(k.SPACE)) this.deploy();
-    if (K.JustDown(k.O)) this.setPage('outfit');
+    if (K.JustDown(k.UP)) this.selectHome(this.homeSel - 1);
+    if (K.JustDown(k.DOWN)) this.selectHome(this.homeSel + 1);
+    if (K.JustDown(k.ENTER) || K.JustDown(k.SPACE)) return this.activate(HOME[this.homeSel].id);
+    const hot: [string, HomeEntry['id']][] = [['P', 'perks'], ['R', 'research'], ['Q', 'quartermaster'], ['A', 'armory'], ['D', 'deploy']];
+    hot.forEach(([key, id], i) => {
+      if (K.JustDown(k[key]) || K.JustDown(k[['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'][i]])) this.activate(id);
+    });
   }
 
-  private selectMission(i: number): void {
-    const n = Phaser.Math.Clamp(i, 0, MISSIONS.length - 1);
-    if (n === this.missionSel) return;
-    this.missionSel = n;
-    this.toast = '';
+  private selectHome(i: number): void {
+    const n = Phaser.Math.Clamp(i, 0, HOME.length - 1);
+    if (n === this.homeSel) return;
+    this.homeSel = n;
     this.sfx.step();
     this.render();
   }
 
-  private updateOutfit(): void {
+  private updateDeploy(): void {
+    const K = Phaser.Input.Keyboard;
+    const k = this.keys;
+    if (K.JustDown(k.TAB)) {
+      this.depFocus = this.depFocus === 'loadout' ? 'bunker' : 'loadout';
+      this.sfx.step();
+      this.render();
+    }
+    if (K.JustDown(k.SPACE)) return this.deploy();
+    if (this.depFocus === 'bunker') {
+      if (K.JustDown(k.UP)) this.selectBunker(this.bunkerSel - 1);
+      if (K.JustDown(k.DOWN)) this.selectBunker(this.bunkerSel + 1);
+      if (K.JustDown(k.ENTER)) this.deploy();
+      if (K.JustDown(k.LEFT)) {
+        this.depFocus = 'loadout';
+        this.render();
+      }
+      return;
+    }
+    const si = SLOTS.indexOf(this.depSlot);
+    if (K.JustDown(k.LEFT)) this.selectSlot(SLOTS[(si + SLOTS.length - 1) % SLOTS.length]);
+    if (K.JustDown(k.RIGHT)) {
+      if (si === SLOTS.length - 1) {
+        this.depFocus = 'bunker';
+        this.render();
+      } else this.selectSlot(SLOTS[si + 1]);
+    }
+    if (K.JustDown(k.UP)) this.selectCand(this.depSel - 1);
+    if (K.JustDown(k.DOWN)) this.selectCand(this.depSel + 1);
+    if (K.JustDown(k.ENTER) || K.JustDown(k.E)) this.equipCand(this.depSel);
+  }
+
+  private selectBunker(i: number): void {
+    const n = Phaser.Math.Clamp(i, 0, BUNKERS.length - 1);
+    this.depFocus = 'bunker';
+    if (n !== this.bunkerSel) this.sfx.step();
+    this.bunkerSel = n;
+    this.toast = '';
+    this.render();
+  }
+
+  private selectSlot(slot: Slot): void {
+    this.depFocus = 'loadout';
+    if (slot !== this.depSlot) this.sfx.step();
+    this.depSlot = slot;
+    this.depSel = 0;
+    this.scroll = 0;
+    this.render();
+  }
+
+  private selectCand(i: number): void {
+    this.depFocus = 'loadout';
+    if (this.depList.length === 0) return;
+    const n = Phaser.Math.Clamp(i, 0, this.depList.length - 1);
+    if (n !== this.depSel) this.sfx.step();
+    this.depSel = n;
+    this.keepVisible();
+    this.render();
+  }
+
+  private equipCand(i: number): void {
+    const c = this.depList[i];
+    if (!c) return;
+    if (c.from === null) {
+      this.say('Already equipped.');
+      this.sfx.step();
+      this.render();
+      return;
+    }
+    equip(c.item, c.from);
+    this.say(`Equipped ${rarityLabel(c.item)} ${baseOf(c.item).name}`, RARITY_COLORS[c.item.rarity]);
+    this.sfx.pickup(c.item.rarity);
+    this.depSel = 0; // the item you just fitted is now the first row
+    this.render();
+  }
+
+  private updateList(): void {
     const K = Phaser.Input.Keyboard;
     const k = this.keys;
     const tabs = this.tabs();
@@ -428,13 +573,15 @@ export class Base extends Phaser.Scene {
 
   private keepVisible(): void {
     const visible = this.visibleRows();
-    if (this.sel < this.scroll) this.scroll = this.sel;
-    if (this.sel >= this.scroll + visible) this.scroll = this.sel - visible + 1;
+    const sel = this.page === 'deploy' ? this.depSel : this.sel;
+    if (sel < this.scroll) this.scroll = sel;
+    if (sel >= this.scroll + visible) this.scroll = sel - visible + 1;
   }
 
   private onWheel(_p: unknown, _o: unknown, _dx: number, dy: number): void {
-    if (this.page !== 'outfit' || this.deploying) return;
-    const max = Math.max(0, this.rows.length - this.visibleRows());
+    if (this.leaving || this.page === 'home') return;
+    const total = this.page === 'deploy' ? this.depList.length : this.rows.length;
+    const max = Math.max(0, total - this.visibleRows());
     const next = Phaser.Math.Clamp(this.scroll + (dy > 0 ? 1 : -1), 0, max);
     if (next === this.scroll) return;
     this.scroll = next;
@@ -450,7 +597,7 @@ export class Base extends Phaser.Scene {
   }
 
   private onMove(p: Phaser.Input.Pointer): void {
-    if (this.deploying) return;
+    if (this.leaving) return;
     const h = this.hitAt(p.x, p.y);
     const id = h ? h.id : '';
     this.input.setDefaultCursor(h && h.enabled !== false ? 'pointer' : 'default');
@@ -465,7 +612,7 @@ export class Base extends Phaser.Scene {
   }
 
   private onClick(p: Phaser.Input.Pointer): void {
-    if (this.deploying) return;
+    if (this.leaving) return;
     this.hitAt(p.x, p.y)?.run();
   }
 
@@ -511,6 +658,15 @@ export class Base extends Phaser.Scene {
     this.box('panel', x, y, w, h, T.ui.panelAlpha);
   }
 
+  /** Text clipped to a width with an ASCII ellipsis. */
+  private fit(s: string, size: number, maxW: number): string {
+    const probe = this.add.text(0, 0, s, { fontFamily: FONT, fontSize: `${snapFont(size)}px` }).setResolution(1).setVisible(false);
+    let out = s;
+    while (out.length > 1 && probe.setText(out).width > maxW) out = out.slice(0, -1);
+    probe.destroy();
+    return out === s ? s : `${out.slice(0, -2)}..`;
+  }
+
   private render(): void {
     if (!this.gfx) return;
     for (const o of this.dyn) o.destroy();
@@ -518,7 +674,9 @@ export class Base extends Phaser.Scene {
     this.hits = [];
     this.rows = this.buildRows();
     this.sel = Phaser.Math.Clamp(this.sel, 0, Math.max(0, this.rows.length - 1));
-    if (!this.tabs().some((t) => t.id === this.tab)) this.tab = 'stash';
+    this.depList = this.buildCands();
+    this.depSel = Phaser.Math.Clamp(this.depSel, 0, Math.max(0, this.depList.length - 1));
+    if (!this.tabs().some((t) => t.id === this.tab)) this.tab = this.tabs()[0].id;
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -527,79 +685,146 @@ export class Base extends Phaser.Scene {
 
     this.drawChrome(w, h);
     let top = HEADER_H + 14;
-    if (this.result) {
+    if (this.result && this.page === 'home') {
       this.drawResult(24, top, w - 48);
-      top += 50;
+      top += 58;
     }
     const ch = h - FOOTER_H - top - 14;
-    if (this.page === 'missions') this.drawMissions(24, top, w - 48, ch);
+    if (this.page === 'home') this.drawHome(24, top, w - 48, ch);
+    else if (this.page === 'deploy') this.drawDeploy(24, top, w - 48, ch);
     else this.drawOutfit(24, top, w - 48, ch);
     this.drawHover();
+  }
+
+  private pageTitle(): string {
+    if (this.mode === 'overlay') return '| OUTFIT |';
+    return { home: '| BASE |', armory: '| ARMORY |', quartermaster: '| QUARTERMASTER |', deploy: '| DEPLOY |' }[this.page];
   }
 
   private drawChrome(w: number, h: number): void {
     // Header and footer are panels pushed past the screen edge so only the inner border shows.
     this.box('panel', -12, -12, w + 24, HEADER_H + 12);
     this.box('panel', -12, h - FOOTER_H, w + 24, FOOTER_H + 12);
-    this.text(24, 14, this.mode === 'hub' ? '| BASE |' : '| OUTFIT |', 26, PALETTE.text);
+    const title = this.text(24, 14, this.pageTitle(), 26, PALETTE.text);
+    const rx = 24 + title.width + 40;
+    const scrap = this.text(rx, 22, `SCRAP ${profile.scrap}`, 16, PALETTE.scrap);
+    this.text(rx + scrap.width + 28, 22, `INTEL ${profile.intel}`, 16, PALETTE.robot);
 
     if (this.mode === 'hub') {
-      let tx = 26;
-      for (const p of PAGES) {
-        const on = p.id === this.page;
-        const tt = this.text(tx + 16, on ? 56 : 58, p.label, 16, on ? PALETTE.white : PALETTE.textDim);
-        const id = p.id;
-        // The tab sits on the header's lower border; the active one stands a little taller.
-        this.box(on ? 'tab_sel' : 'tab_un', tx, on ? 44 : 48, tt.width + 32, on ? 42 : 38);
-        this.hit(`page:${id}`, tx, 44, tt.width + 32, 42, () => {
-          if (id === 'research' || id === 'perks') this.openTree(id);
-          else this.setPage(id);
-        });
-        tx += tt.width + 40;
-      }
-      const t = this.text(w - 42, 55, '< TITLE  [ESC]', 16, PALETTE.text, [1, 0]);
-      this.box('btn', w - 24 - t.width - 36, 44, t.width + 36, 38);
-      this.hit('title', w - 24 - t.width - 36, 44, t.width + 36, 38, () => this.toTitle());
+      const label = this.page === 'home' ? '< TITLE  [ESC]' : '< BASE  [ESC]';
+      const t = this.text(w - 42, 22, label, 16, PALETTE.text, [1, 0]);
+      this.box('btn', w - 24 - t.width - 36, 10, t.width + 36, 40);
+      this.hit('back', w - 24 - t.width - 36, 10, t.width + 36, 40, () => this.back());
     }
-    const intel = this.text(w - 24, 14, `INTEL ${profile.intel}`, 16, PALETTE.robot, [1, 0]);
-    this.text(w - 24 - intel.width - 28, 14, `SCRAP ${profile.scrap}`, 16, PALETTE.scrap, [1, 0]);
 
-    const hint = this.mode === 'overlay'
-      ? 'LEFT/RIGHT tabs   UP/DOWN select   E equip   M move   S sell   D dismantle   TAB trees   ESC close'
-      : this.page === 'missions'
-        ? 'UP/DOWN select   ENTER deploy   O outfit   TAB page   R research   P perks   ESC title'
-        : 'LEFT/RIGHT tabs   UP/DOWN select   E equip   M move   S sell   D dismantle   TAB missions   R research   P perks   ESC title';
-    this.text(24, h - 14, hint, 12, PALETTE.textDim, [0, 1]);
+    this.text(24, h - 14, this.hint(), 12, PALETTE.textDim, [0, 1]);
     if (this.toast) this.text(w - 24, h - 14, this.toast, 13, this.toastColor, [1, 1]);
+  }
+
+  private hint(): string {
+    if (this.mode === 'overlay') return 'LEFT/RIGHT tabs   UP/DOWN select   E equip   M move   S sell   D dismantle   TAB trees   ESC close';
+    if (this.page === 'home') return 'UP/DOWN select   ENTER open   P perks   R research   Q quartermaster   A armory   D deploy   ESC title';
+    if (this.page === 'deploy') return 'TAB switch gear / bunker   LEFT/RIGHT slot   UP/DOWN choose   ENTER equip or deploy   SPACE deploy   ESC base';
+    if (this.page === 'quartermaster') return 'UP/DOWN select   ENTER buy   ESC base';
+    return 'LEFT/RIGHT tabs   UP/DOWN select   E equip   S sell   D dismantle   ESC base';
   }
 
   private drawResult(x: number, y: number, w: number): void {
     const r = this.result!;
     const g = this.gfx;
-    const color = r.outcome === 'extracted' ? PALETTE.player : PALETTE.hostile;
-    this.box('field', x, y, w, 42, 1, color);
+    const done = r.outcome === 'extracted' && r.complete;
+    const color = done ? PALETTE.ammo : r.outcome === 'extracted' ? PALETTE.player : PALETTE.hostile;
+    const h = 50;
+    this.box('field', x, y, w, h, 1, color);
     g.fillStyle(color, 1);
-    g.fillRect(x + 6, y + 6, 4, 30);
-    const head = r.outcome === 'extracted' ? 'EXTRACTED' : r.outcome === 'lost' ? 'AUG LOST' : 'MISSION ABORTED';
+    g.fillRect(x + 6, y + 6, 4, h - 12);
+    const head = done ? 'BUNKER CLAIMED' : r.outcome === 'extracted' ? 'EXTRACTED' : r.outcome === 'lost' ? 'AUG LOST' : 'RUN ABORTED';
     const bits: string[] = [];
     if (r.outcome === 'extracted') {
       bits.push(r.items > 0 ? `${r.items} item${r.items > 1 ? 's' : ''} banked` : 'nothing banked');
       if (r.scrap > 0) bits.push(`+${r.scrap} scrap`);
+      if (r.bonusScrap > 0) bits.push(`+${r.bonusScrap} clear bonus`);
     } else {
       bits.push(r.lost > 0 ? `${r.lost} carried item${r.lost > 1 ? 's' : ''} lost` : 'nothing carried');
       if (r.outcome === 'lost') bits.push('a new Aug has regrown at the base');
     }
     if (r.intel > 0) bits.push(`+${r.intel} Intel`);
-    if (r.wave > 0) bits.push(`reached wave ${r.wave}`);
-    this.text(x + 22, y + 13, head, 16, color);
-    this.text(x + 22 + 170, y + 14, bits.join('   '), 12, PALETTE.text);
-    const ico = uiIcon(this, 'close', x + w - 34, y + 10).setDepth(5);
+    if (r.roomsTotal > 0) bits.push(`${r.rooms}/${r.roomsTotal} rooms`);
+    this.text(x + 22, y + 8, head, 16, color);
+    this.text(x + 22, y + 29, bits.join('   '), 12, PALETTE.text);
+    const ico = uiIcon(this, 'close', x + w - 34, y + 14).setDepth(5);
     this.dyn.push(ico);
-    this.hit('result', x + w - 44, y, 44, 42, () => {
+    this.hit('result', x + w - 44, y, 44, h, () => {
       this.result = null;
       this.sfx.step();
       this.render();
     });
+  }
+
+  // ---- home ------------------------------------------------------------------------------------
+
+  private drawHome(x: number, y: number, w: number, h: number): void {
+    const menuW = Math.min(480, Math.floor(w * 0.44));
+    const bh = Math.min(72, Math.floor((h - 32 - 4 * 10) / HOME.length));
+    const menuH = 32 + HOME.length * bh + (HOME.length - 1) * 10;
+    this.panel(x, y, menuW, menuH);
+    HOME.forEach((e, i) => {
+      const by = y + 16 + i * (bh + 10);
+      const on = i === this.homeSel;
+      const deploy = e.id === 'deploy';
+      this.box(on ? 'btn_hover' : 'btn', x + 16, by, menuW - 32, bh);
+      if (deploy) {
+        this.gfx.fillStyle(PALETTE.player, 1);
+        this.gfx.fillRect(x + 22, by + 8, 4, bh - 16);
+      } else if (on) {
+        this.gfx.fillStyle(PALETTE.structure, 1);
+        this.gfx.fillRect(x + 22, by + 8, 4, bh - 16);
+      }
+      this.text(x + 38, by + 10, e.label, 24, deploy ? PALETTE.player : PALETTE.white);
+      this.text(x + 38, by + bh - 24, e.sub(), 12, PALETTE.textDim);
+      this.text(x + menuW - 30, by + 12, `[${e.key}]`, 12, PALETTE.ammo, [1, 0]);
+      this.hit(`home:${e.id}`, x + 16, by, menuW - 32, bh, () => {
+        this.homeSel = i;
+        this.activate(e.id);
+      });
+    });
+
+    // Right: where you stand.
+    const ix = x + menuW + 20;
+    const iw = w - menuW - 20;
+    this.panel(ix, y, iw, h);
+    this.text(ix + 20, y + 16, 'AUG', 14, PALETTE.textDim);
+    let ly = y + 40;
+    for (const slot of SLOTS) {
+      const it = profile.equipped[slot];
+      this.text(ix + 20, ly + 2, SLOT_LABELS[slot], 11, PALETTE.textDim);
+      if (it) {
+        this.text(ix + 130, ly, `${rarityLabel(it)} ${baseOf(it).name}`, 16, RARITY_COLORS[it.rarity]);
+      } else {
+        this.text(ix + 130, ly, '(empty)', 16, PALETTE.textDim);
+      }
+      ly += 28;
+    }
+    this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
+    this.gfx.lineBetween(ix + 14, ly + 6, ix + iw - 14, ly + 6);
+    ly += 22;
+    this.text(ix + 20, ly, 'BUNKERS', 14, PALETTE.textDim);
+    ly += 26;
+    for (const b of BUNKERS) {
+      const claimed = profile.claimed.has(b.id);
+      const floors = b.floors.length;
+      const rooms = b.floors.reduce((a, n) => a + n, 0);
+      this.text(ix + 20, ly, b.name, 16, PALETTE.white);
+      this.text(ix + 190, ly + 3, `${floors} floors, ${rooms} rooms`, 12, PALETTE.textDim);
+      this.text(ix + iw - 20, ly + 2, claimed ? 'CLAIMED' : 'UNCLAIMED', 12, claimed ? PALETTE.player : PALETTE.textDim, [1, 0]);
+      ly += 28;
+    }
+    ly += 12;
+    this.gfx.lineBetween(ix + 14, ly - 4, ix + iw - 14, ly - 4);
+    const note = this.text(ix + 20, ly + 8,
+      'Gear is the progression. Take it from the dead, bank it by extracting, and bring something better next time. Carried loot is lost if you die.',
+      13, PALETTE.textDim);
+    note.setWordWrapWidth(iw - 40);
   }
 
   // ---- outfit page ---------------------------------------------------------------------------
@@ -803,74 +1028,171 @@ export class Base extends Phaser.Scene {
     return y + bh;
   }
 
-  // ---- missions page -------------------------------------------------------------------------
+  // ---- deploy ----------------------------------------------------------------------------------
 
-  private drawMissions(x: number, y: number, w: number, h: number): void {
-    const listW = Math.min(380, Math.floor(w * 0.36));
-    this.panel(x, y, listW, h);
-    this.text(x + 14, y + 12, 'MISSIONS', 14, PALETTE.textDim);
-    const cardH = 92;
-    MISSIONS.forEach((m, i) => {
-      const cy = y + 40 + i * (cardH + 10);
-      const on = i === this.missionSel;
-      const locked = !!m.locked;
-      this.box(on ? 'btn_hover' : 'field', x + 8, cy, listW - 16, cardH, locked ? 0.7 : 1);
-      if (on) {
-        this.gfx.fillStyle(PALETTE.structure, 1);
-        this.gfx.fillRect(x + 14, cy + 6, 4, cardH - 12);
+  /** Percent change of a candidate's first stat against what is equipped, for the row tag. */
+  private diffTag(c: Cand): { text: string; color: number } | null {
+    if (c.from === null) return null;
+    const base = baseOf(c.item);
+    const eq = profile.equipped[base.slot];
+    if (!eq) return null;
+    const mine = new Map(statLines(baseOf(eq), eq.rarity).map((l) => [l.key, l]));
+    for (const l of statLines(base, c.item.rarity).slice(0, 3)) {
+      const m = mine.get(l.key);
+      if (!m || m.value === 0) continue;
+      const diff = l.value - m.value;
+      if (Math.abs(diff) < 1e-6) continue;
+      const better = l.higherBetter ? diff > 0 : diff < 0;
+      const pct = Math.round((diff / Math.abs(m.value)) * 100);
+      return { text: `${l.label} ${diff > 0 ? '+' : ''}${pct}%`, color: better ? PALETTE.player : PALETTE.hostile };
+    }
+    return null;
+  }
+
+  private drawDeploy(x: number, y: number, w: number, h: number): void {
+    const lw = Math.floor(w * 0.5) - 10;
+    this.drawLoadout(x, y, lw, h);
+    this.drawBunkers(x + lw + 20, y, w - lw - 20, h);
+  }
+
+  private focusFrame(x: number, y: number, w: number, h: number, on: boolean): void {
+    if (!on) return;
+    this.gfx.lineStyle(2, PALETTE.structure, 0.9);
+    this.gfx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+  }
+
+  private drawLoadout(x: number, y: number, w: number, h: number): void {
+    this.panel(x, y, w, h);
+    this.focusFrame(x, y, w, h, this.depFocus === 'loadout');
+    this.hit('pane:loadout', x, y, w, h, () => {
+      if (this.depFocus !== 'loadout') {
+        this.depFocus = 'loadout';
+        this.render();
       }
-      this.hit(`mission:${i}`, x + 8, cy, listW - 16, cardH, () => this.selectMission(i), true);
-      this.text(x + 26, cy + 12, m.name, 22, locked ? PALETTE.textDim : PALETTE.white);
-      this.text(x + 26, cy + 42, m.tag, 12, PALETTE.textDim);
-      this.text(x + 26, cy + 64, locked ? 'LOCKED' : 'AVAILABLE', 12, locked ? PALETTE.hostile : PALETTE.player);
+    });
+    this.text(x + 16, y + 12, 'LOADOUT', 14, PALETTE.textDim);
+    this.text(x + w - 16, y + 14, 'click a slot, then a piece of gear', 11, PALETTE.textDim, [1, 0]);
+
+    // Slot tiles.
+    const gap = 6;
+    const tw = Math.floor((w - 32 - gap * (SLOTS.length - 1)) / SLOTS.length);
+    const ty = y + 38;
+    const th = 64;
+    SLOTS.forEach((slot, i) => {
+      const tx = x + 16 + i * (tw + gap);
+      const on = slot === this.depSlot;
+      const it = profile.equipped[slot];
+      this.box(on ? 'btn_hover' : 'btn', tx, ty, tw, th);
+      this.text(tx + 10, ty + 8, SLOT_LABELS[slot], 11, on ? PALETTE.structure : PALETTE.textDim);
+      if (it) {
+        const col = RARITY_COLORS[it.rarity];
+        this.text(tx + 10, ty + 26, this.fit(baseOf(it).name, 12, tw - 20), 12, col);
+        this.text(tx + 10, ty + 44, RARITY_LABELS[it.rarity], 8, PALETTE.textDim);
+      } else {
+        this.text(tx + 10, ty + 28, '(empty)', 12, PALETTE.textDim);
+      }
+      this.hit(`dslot:${slot}`, tx, ty, tw, th, () => this.selectSlot(slot));
     });
 
-    const dx = x + listW + 20;
-    const dw = w - listW - 20;
-    this.panel(dx, y, dw, h);
-    const m = MISSIONS[this.missionSel];
-    const locked = !!m.locked;
-    this.text(dx + 22, y + 18, m.name, 34, locked ? PALETTE.textDim : PALETTE.white);
-    this.text(dx + 22, y + 62, m.tag, 13, PALETTE.textDim);
-    const body = this.text(dx + 22, y + 90, m.blurb, 14, PALETTE.text);
-    body.setWordWrapWidth(dw - 44);
-    let ly = y + 90 + body.height + 18;
-    this.text(dx + 22, ly, 'THREATS', 11, PALETTE.textDim);
-    this.text(dx + 120, ly - 1, m.threats, 13, PALETTE.text);
-    ly += 24;
-    this.text(dx + 22, ly, 'REWARDS', 11, PALETTE.textDim);
-    this.text(dx + 120, ly - 1, m.rewards, 13, PALETTE.text);
-    ly += 38;
-
-    // Loadout: what goes out the door. Click a row to change it.
-    this.text(dx + 22, ly, 'LOADOUT  (click to change)', 11, PALETTE.textDim);
-    ly += 22;
-    for (const slot of SLOTS) {
-      const it = profile.equipped[slot];
-      this.hit(`load:${slot}`, dx + 14, ly - 4, dw - 28, 30, () => {
-        this.slotFilter = slot;
-        this.tab = runState.stash.length > 0 ? 'stash' : 'shop';
-        this.sel = 0;
-        this.scroll = 0;
-        this.setPage('outfit');
-      });
-      this.text(dx + 22, ly + 2, SLOT_LABELS[slot], 11, PALETTE.textDim);
-      if (it) {
-        this.text(dx + 120, ly, `${rarityLabel(it)} ${baseOf(it).name}`, 14, RARITY_COLORS[it.rarity]);
-        const s = statLines(baseOf(it), it.rarity).slice(0, 2).map((l) => `${l.label} ${l.text}`).join('   ');
-        this.text(dx + dw - 22, ly + 2, s, 11, PALETTE.textDim, [1, 0]);
-      } else {
-        this.text(dx + 120, ly, '(empty)', 14, PALETTE.textDim);
-      }
-      ly += 30;
+    // Candidates.
+    const ly = ty + th + 14;
+    this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
+    this.gfx.lineBetween(x + 12, ly - 6, x + w - 12, ly - 6);
+    this.listRect = { x, y: ly, w, h: y + h - ly - 10 };
+    if (this.depList.length === 0) {
+      this.text(x + 16, ly + 6, `Nothing for the ${SLOT_LABELS[this.depSlot].toLowerCase()} slot. Buy baseline gear from the quartermaster or bring something back.`, 13, PALETTE.textDim)
+        .setWordWrapWidth(w - 32);
+      return;
     }
+    this.keepVisible();
+    const visible = this.visibleRows();
+    for (let i = 0; i < visible; i++) {
+      const idx = this.scroll + i;
+      const c = this.depList[idx];
+      if (!c) break;
+      const ry = ly + i * ROW_H;
+      const base = baseOf(c.item);
+      const col = RARITY_COLORS[c.item.rarity];
+      if (idx === this.depSel) this.box('btn_hover', x + 8, ry, w - 16, ROW_H - 2, 1).setDepth(0.6);
+      this.gfx.fillStyle(col, 1);
+      this.gfx.fillRect(x + 14, ry + 6, 3, ROW_H - 14);
+      this.text(x + 26, ry + 4, `${RARITY_LABELS[c.item.rarity]} ${base.name}`, 14, col);
+      const lines = statLines(base, c.item.rarity).slice(0, 2).map((l) => `${l.label} ${l.text}`).join('   ');
+      this.text(x + 26, ry + 22, lines, 11, PALETTE.textDim);
+      if (c.from === null) {
+        this.text(x + w - 18, ry + 11, 'EQUIPPED', 12, PALETTE.player, [1, 0]);
+      } else {
+        const d = this.diffTag(c);
+        if (d) this.text(x + w - 18, ry + 11, d.text, 12, d.color, [1, 0]);
+      }
+      this.hit(`drow:${idx}`, x + 4, ry, w - 8, ROW_H - 2, () => (idx === this.depSel && this.depFocus === 'loadout' ? this.equipCand(idx) : this.selectCand(idx)));
+    }
+    if (this.depList.length > visible) {
+      const sh = (this.listRect.h * visible) / this.depList.length;
+      const sy = ly + (this.listRect.h - sh) * (this.scroll / (this.depList.length - visible));
+      this.gfx.fillStyle(PALETTE.structureDim, 0.8);
+      this.gfx.fillRect(x + w - 6, sy, 3, sh);
+    }
+  }
+
+  private drawBunkers(x: number, y: number, w: number, h: number): void {
+    this.panel(x, y, w, h);
+    this.focusFrame(x, y, w, h, this.depFocus === 'bunker');
+    this.hit('pane:bunker', x, y, w, h, () => {
+      if (this.depFocus !== 'bunker') {
+        this.depFocus = 'bunker';
+        this.render();
+      }
+    });
+    this.text(x + 16, y + 12, 'BUNKER', 14, PALETTE.textDim);
+
+    const cardH = 52;
+    BUNKERS.forEach((b, i) => {
+      const cy = y + 38 + i * (cardH + 6);
+      const on = i === this.bunkerSel;
+      const claimed = profile.claimed.has(b.id);
+      this.box(on ? 'btn_hover' : 'field', x + 12, cy, w - 24, cardH, b.locked ? 0.7 : 1);
+      if (on) {
+        this.gfx.fillStyle(PALETTE.structure, 1);
+        this.gfx.fillRect(x + 18, cy + 6, 4, cardH - 12);
+      }
+      this.text(x + 34, cy + 8, b.name, 16, b.locked ? PALETTE.textDim : PALETTE.white);
+      this.text(x + 34, cy + 30, b.tag, 11, PALETTE.textDim);
+      this.text(x + w - 28, cy + 10, b.locked ? 'LOCKED' : claimed ? 'CLAIMED' : 'UNCLAIMED', 12, b.locked ? PALETTE.hostile : claimed ? PALETTE.player : PALETTE.textDim, [1, 0]);
+      this.hit(`bunker:${i}`, x + 12, cy, w - 24, cardH, () => this.selectBunker(i));
+    });
+
+    const b = BUNKERS[this.bunkerSel];
+    const rooms = b.floors.reduce((a, n) => a + n, 0);
+    let dy = y + 38 + BUNKERS.length * (cardH + 6) + 8;
+    this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
+    this.gfx.lineBetween(x + 12, dy - 4, x + w - 12, dy - 4);
+    dy += 6;
+    const body = this.text(x + 18, dy, b.blurb, 13, PALETTE.text);
+    body.setWordWrapWidth(w - 36);
+    dy += body.height + 12;
+    const kv = (k: string, v: string, col: number = PALETTE.text): void => {
+      this.text(x + 18, dy + 1, k, 11, PALETTE.textDim);
+      const t = this.text(x + 112, dy, v, 13, col);
+      t.setWordWrapWidth(w - 130);
+      dy += Math.max(20, t.height + 4);
+    };
+    kv('LAYOUT', `${b.floors.length} floors, ${rooms} rooms, the Warden at the bottom`);
+    kv('THREATS', b.threats);
+    kv('REWARDS', b.rewards);
+    kv('ADVICE', b.advice, PALETTE.ammo);
+    const roster = (Object.keys(b.bias) as (keyof typeof b.bias)[]).filter((k) => (b.bias[k] ?? 1) > 1).map((k) => MOBS[k]!.name);
+    if (roster.length) kv('SEEN HERE', roster.join(', '));
 
     // Deploy.
     const bh = 54;
-    const by = y + h - bh - 22;
-    this.text(dx + 22, by - 40, locked ? m.locked! : 'Carried loot is lost if you die. Extract with X to bank it.', 12, locked ? PALETTE.hostile : PALETTE.textDim).setWordWrapWidth(dw - 44);
-    this.box(locked ? 'btn_dis' : 'btn_hover', dx + 22, by, dw - 44, bh);
-    this.text(dx + dw / 2, by + bh / 2, locked ? 'SEALED' : 'DEPLOY  [ENTER]', 22, locked ? PALETTE.textDim : PALETTE.white, [0.5, 0.5]);
-    this.hit('deploy', dx + 22, by, dw - 44, bh, () => this.deploy(), !locked);
+    const by = y + h - bh - 16;
+    const locked = !!b.locked;
+    this.text(x + 18, by - 26, locked ? b.locked! : 'Carried loot is lost if you die. Lifts and the last exit extract it.', 12, locked ? PALETTE.hostile : PALETTE.textDim)
+      .setWordWrapWidth(w - 36);
+    this.box(locked ? 'btn_dis' : 'btn_hover', x + 16, by, w - 32, bh);
+    this.text(x + w / 2, by + bh / 2, locked ? 'SEALED' : 'DEPLOY  [SPACE]', 24, locked ? PALETTE.textDim : PALETTE.player, [0.5, 0.5]);
+    this.hit('deploy', x + 16, by, w - 32, bh, () => this.deploy(), !locked);
   }
+
 }

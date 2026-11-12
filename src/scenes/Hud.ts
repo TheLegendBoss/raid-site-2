@@ -18,7 +18,8 @@ const MAG_DROP = 26; // px the magazine falls when released
 // Layout. Panels hug the screen corners with a 16px margin.
 const MARGIN = 16;
 const VIT = { w: 304, h: 182 }; // vitals + abilities, top-left
-const STA = { w: 232, h: 72 }; // wave status, top-right
+const STA = { w: 232, h: 96 }; // room and wave status, top-right
+const BOSS = { h: 64, maxW: 560 }; // boss bar, top-centre
 const WEP = { w: 360, h: 168 }; // weapon, bottom-right
 const SLOT = { w: 132, h: 48 };
 const FIELD_INSET = 6; // a field's 2 px art border at the UI scale
@@ -59,6 +60,11 @@ export class Hud extends Phaser.Scene {
   private shieldNum!: Txt;
   private hullNum!: Txt;
   private waveText!: Txt;
+  private roomText!: Txt;
+  private bossText!: Txt;
+  private bossPanel!: Phaser.GameObjects.NineSlice;
+  private bossField!: Phaser.GameObjects.NineSlice;
+  private bossGhost = 1;
   private hostText!: Txt;
   private subText!: Txt;
   private fpsText!: Txt;
@@ -149,6 +155,10 @@ export class Hud extends Phaser.Scene {
     this.shieldNum = mk(24, PALETTE.shield, 1, 0);
     this.hullNum = mk(24, PALETTE.health, 1, 0);
     this.waveText = mk(24, PALETTE.structure, 0, 0);
+    this.roomText = mk(12, PALETTE.text, 0, 0);
+    this.bossText = mk(16, PALETTE.robot, 0.5, 0).setDepth(6);
+    this.bossPanel = uiPanel(this, 'panel', 0, 0, 10, 10).setDepth(4).setAlpha(T.ui.panelAlpha).setVisible(false);
+    this.bossField = uiPanel(this, 'field', 0, 0, 10, 10).setDepth(4.4).setVisible(false);
     this.hostText = mk(16, PALETTE.text, 1, 0);
     this.subText = mk(11, PALETTE.textDim);
     this.fpsText = mk(11, PALETTE.textDim, 1, 0);
@@ -189,7 +199,7 @@ export class Hud extends Phaser.Scene {
         'blade kills refund reserve ammo + shield',
         ...(runState.devMode
           ? ['1 swarm   2 robot   K clear   T reset room', 'X extract   B base   TAB trees   ESC pause   M mute   H hide help']
-          : ['X extract and leave   ESC pause   M mute   H hide help']),
+          : ['X use a pad (descend, or extract at a lift)   ESC pause   M mute   H hide help']),
       ].join('\n'),
     );
   }
@@ -366,15 +376,45 @@ export class Hud extends Phaser.Scene {
   private drawStatus(w: number): void {
     const s = runState;
     const x = w - MARGIN - STA.w;
-    this.setText(this.waveText, s.wave === 0 ? 'WAVE -' : `WAVE ${s.wave}`);
-    this.waveText.setPosition(x + 18, MARGIN + 12);
+    this.setText(this.roomText, s.roomLabel || 'FREE PLAY');
+    this.roomText.setColor(hex(s.roomLabel ? PALETTE.text : PALETTE.textDim)).setPosition(x + 18, MARGIN + 12);
+    const waves = s.wave === 0 ? 'WAVE -' : s.waveTotal > 0 ? `WAVE ${s.wave}/${s.waveTotal}` : `WAVE ${s.wave}`;
+    this.setText(this.waveText, waves);
+    this.waveText.setPosition(x + 18, MARGIN + 32);
     this.setText(this.hostText, `${s.mobsAlive} HOSTILE${s.mobsAlive === 1 ? '' : 'S'}`);
-    this.hostText.setColor(hex(s.mobsAlive > 0 ? PALETTE.hostile : PALETTE.textDim)).setPosition(x + STA.w - 18, MARGIN + 18);
+    this.hostText.setColor(hex(s.mobsAlive > 0 ? PALETTE.hostile : PALETTE.textDim)).setPosition(x + STA.w - 18, MARGIN + 38);
     this.setText(this.subText, s.intermission > 0 ? `NEXT WAVE ${s.intermission.toFixed(1)}s` : s.mobsAlive > 0 ? 'ENGAGED' : 'CLEAR');
-    this.subText.setPosition(x + 18, MARGIN + 46);
+    this.subText.setPosition(x + 18, MARGIN + 70);
     this.setText(this.fpsText, `${Math.round(this.game.loop.actualFps)} FPS${s.muted ? '  MUTED' : ''}`);
-    this.fpsText.setPosition(x + STA.w - 18, MARGIN + 46);
+    this.fpsText.setPosition(x + STA.w - 18, MARGIN + 70);
+    this.drawBoss(w);
     this.helpText.setVisible(s.showHelp).setPosition(w - MARGIN, MARGIN + STA.h + 10);
+  }
+
+  /** The Warden's health, top-centre, only while one is alive. */
+  private drawBoss(w: number): void {
+    const s = runState;
+    const on = s.bossMax > 0 && s.bossHp > 0;
+    this.bossPanel.setVisible(on);
+    this.bossField.setVisible(on);
+    this.bossText.setVisible(on);
+    if (!on) {
+      this.bossGhost = 1;
+      return;
+    }
+    const bw = Math.min(BOSS.maxW, Math.floor(w * 0.42));
+    const bx = Math.round((w - bw) / 2);
+    sizePanel(this.bossPanel, bx, MARGIN, bw, BOSS.h);
+    sizePanel(this.bossField, bx + 16, MARGIN + 34, bw - 32, 24);
+    this.setText(this.bossText, s.bossName);
+    this.bossText.setPosition(w / 2, MARGIN + 10);
+    const frac = clamp(s.bossHp / s.bossMax, 0, 1);
+    this.bossGhost = Math.max(frac, this.bossGhost - 0.35 / 60);
+    this.pixBar(bx + 16, MARGIN + 34, bw - 32, 24, frac, this.bossGhost, PALETTE.robot);
+    // Stage ticks where the Warden changes its pattern.
+    const iw = bw - 32 - 12;
+    this.bars.fillStyle(0x000000, 0.7);
+    for (const t of [0.66, 0.33]) this.bars.fillRect(bx + 16 + 6 + Math.round(iw * t), MARGIN + 40, 2, 12);
   }
 
   /** The pad prompt, above the status line, only while standing on a pad. */

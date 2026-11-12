@@ -31,4 +31,3 @@ export const DISMANTLE_INTEL: readonly number[] = [4, 9, 20, 45, 100, 220, 500];
 /** The quartermaster sells baseline gear up to this rarity (inclusive), at a markup per rarity. */
 export const QM = { maxRarity: 1, markup: [1, 2.2] as readonly number[] } as const;
 
-export const STASH_SLOTS = 60;
