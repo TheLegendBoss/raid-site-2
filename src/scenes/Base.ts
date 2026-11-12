@@ -22,7 +22,7 @@ import type { MissionResult } from '../game/mission';
 import { runState } from '../game/runState';
 import { statLines, type StatLine } from '../sim/describe';
 import { GUN_KITS, KIT_SLOTS, PART_NAMES } from '../data/gunKits';
-import { pixGunKey } from '../fx/pixGun';
+import { pixGunKey, pixMagKey } from '../fx/pixGun';
 import { baseOf, buyPrice, dismantleIntel, rarityLabel, sellValue, type Item } from '../sim/loot';
 import { showCursor } from '../ui/cursor';
 
@@ -779,22 +779,29 @@ export class Base extends Phaser.Scene {
   private drawGunSchematic(x: number, y: number, w: number, shape: string, kit: (typeof GUN_KITS)[string], col: number): number {
     const sc = 2;
     const gw = 64 * sc;
-    const bh = 4 * 16 + 8;
+    const rowH = 13;
+    const rows: { label: string; part?: string }[] = [
+      ...KIT_SLOTS.map((slot) => ({ label: slot.label, part: kit[slot.key] })),
+      { label: 'MAGAZINE', part: kit.mag.part },
+    ];
+    const bh = rows.length * rowH + 8;
     this.gfx.fillStyle(0x070f12, 1);
     this.gfx.fillRect(x, y, w, bh);
     this.gfx.lineStyle(1, col, 0.7);
     this.gfx.strokeRect(x, y, w, bh);
-    const img = this.add.image(x + 8, y + (bh - 32 * sc) / 2, pixGunKey(shape)).setOrigin(0, 0).setScale(sc).setDepth(5);
-    this.dyn.push(img);
+    const ix = x + 8;
+    const iy = y + (bh - 32 * sc) / 2;
+    const mag = this.add.image(ix + kit.mag.x * sc, iy + kit.mag.y * sc, pixMagKey(shape)).setOrigin(0, 0).setScale(sc).setDepth(5);
+    const img = this.add.image(ix, iy, pixGunKey(shape)).setOrigin(0, 0).setScale(sc).setDepth(5);
+    this.dyn.push(mag, img);
     const cx = x + gw + 24;
-    KIT_SLOTS.forEach((slot, i) => {
-      const part = kit[slot.key];
-      const ry = y + 6 + i * 16;
-      this.text(cx, ry + 2, slot.label, 9, PALETTE.textDim);
-      this.text(x + w - 8, ry + 1, part ? (PART_NAMES[part] ?? part) : 'none', 11, part ? PALETTE.text : PALETTE.textDim, [1, 0]);
-      if (i < KIT_SLOTS.length - 1) {
+    rows.forEach((r, i) => {
+      const ry = y + 5 + i * rowH;
+      this.text(cx, ry + 2, r.label, 9, PALETTE.textDim);
+      this.text(x + w - 8, ry, r.part ? (PART_NAMES[r.part] ?? r.part) : 'none', 11, r.part ? PALETTE.text : PALETTE.textDim, [1, 0]);
+      if (i < rows.length - 1) {
         this.gfx.lineStyle(1, PALETTE.structureDim, 0.35);
-        this.gfx.lineBetween(cx, ry + 15, x + w - 8, ry + 15);
+        this.gfx.lineBetween(cx, ry + 12, x + w - 8, ry + 12);
       }
     });
     return y + bh;

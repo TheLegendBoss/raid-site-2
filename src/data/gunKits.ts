@@ -8,9 +8,11 @@ export interface GunKit {
   barrel: string;
   stock?: string;
   scope?: string;
+  /** Underbarrel accessory: grip, launcher, bayonet, light. */
+  under?: string;
   finish: keyof typeof FINISHES;
-  /** Magazine well in the right-facing 64x32 sprite: x, y of the top, width, height (sprite px). */
-  mag: readonly [number, number, number, number];
+  /** The magazine is its own sprite so it can drop out on reload: part name and its top-left in the 64x32 gun sprite. */
+  mag: { part: string; x: number; y: number };
 }
 
 /** Four-stop ramps, dark to light. Parts are authored in purple and remapped onto these. */
@@ -26,23 +28,24 @@ export const FINISH_DARK: readonly Rgb[] = [[10, 12, 12], [24, 27, 27], [42, 46,
 
 /** Keyed by GunShape in items.ts. */
 export const GUN_KITS: Record<string, GunKit> = {
-  smg: { body: 'body_projectile_01', barrel: 'barrel_assault', stock: 'stock_05', scope: 'scope_01', finish: 'gunmetal', mag: [25, 16, 5, 13] },
-  pistol: { body: 'body_projectile_02', barrel: 'barrel_short', scope: 'laser_pointer', finish: 'gunmetal', mag: [17, 16, 5, 12] },
-  magnum: { body: 'body_projectile_03', barrel: 'barrel_heavy_short', finish: 'bronze', mag: [16, 17, 5, 11] },
-  shotgun: { body: 'body_projectile_03', barrel: 'barrel_heavy', stock: 'stock_03', finish: 'rust', mag: [17, 17, 5, 10] },
-  marksman: { body: 'body_projectile_03', barrel: 'barrel_rifle', stock: 'stock_07', scope: 'scope_04', finish: 'gunmetal', mag: [25, 17, 5, 12] },
-  burst: { body: 'body_projectile_02', barrel: 'barrel_rifle', stock: 'stock_04', scope: 'scope_02', finish: 'gunmetal', mag: [26, 17, 5, 12] },
+  smg: { body: 'body_projectile_01', barrel: 'barrel_suppressor', stock: 'stock_wire', scope: 'scope_reflex', finish: 'gunmetal', mag: { part: 'mag_curved', x: 25, y: 16 } },
+  pistol: { body: 'body_projectile_02', barrel: 'barrel_brake', stock: 'stock_ring', scope: 'laser_pointer', finish: 'gunmetal', mag: { part: 'mag_stick', x: 17, y: 16 } },
+  magnum: { body: 'body_projectile_03', barrel: 'barrel_heavy_short', scope: 'scope_iron', finish: 'bronze', mag: { part: 'mag_stick', x: 16, y: 17 } },
+  shotgun: { body: 'body_projectile_03', barrel: 'barrel_flared', stock: 'stock_buttplate', finish: 'rust', mag: { part: 'mag_drum', x: 14, y: 17 } },
+  marksman: { body: 'body_projectile_03', barrel: 'barrel_rifle', stock: 'stock_cheek', scope: 'scope_long', finish: 'gunmetal', mag: { part: 'mag_extended', x: 25, y: 17 } },
+  burst: { body: 'body_projectile_02', barrel: 'barrel_brake', stock: 'stock_04', scope: 'scope_prism', under: 'under_grip', finish: 'gunmetal', mag: { part: 'mag_curved', x: 26, y: 17 } },
 };
 
 /** Parts are shifted this many sprite px along the barrel so the seam with the body closes. */
 export const KIT_BARREL_SHIFT = 1;
 
-/** The mod slots a gun is built from, in display order. */
+/** The mod slots a gun is built from, in display order. The magazine is listed separately (it is not composited). */
 export const KIT_SLOTS = [
   { key: 'body', label: 'RECEIVER' },
   { key: 'barrel', label: 'BARREL' },
   { key: 'scope', label: 'OPTIC' },
   { key: 'stock', label: 'STOCK' },
+  { key: 'under', label: 'UNDER' },
 ] as const;
 
 /** Display names for the parts. */
@@ -64,4 +67,25 @@ export const PART_NAMES: Record<string, string> = {
   scope_01: 'Red Dot',
   scope_02: 'Holo Sight',
   scope_04: 'Long Scope',
+  // Our own parts (art/pixparts).
+  barrel_suppressor: 'Suppressor',
+  barrel_brake: 'Muzzle Brake',
+  barrel_flared: 'Flared Bore',
+  barrel_twin: 'Twin Barrel',
+  stock_buttplate: 'Buttplate Stock',
+  stock_wire: 'Wire Stock',
+  stock_cheek: 'Cheek-Rest Stock',
+  stock_ring: 'Sling Ring',
+  scope_iron: 'Iron Sights',
+  scope_prism: 'Prism Sight',
+  scope_long: 'Sniper Scope',
+  scope_reflex: 'Reflex Sight',
+  under_grip: 'Foregrip',
+  under_launcher: 'Grenade Launcher',
+  under_bayonet: 'Bayonet',
+  under_light: 'Weapon Light',
+  mag_stick: 'Stick Magazine',
+  mag_curved: 'Curved Magazine',
+  mag_extended: 'Extended Magazine',
+  mag_drum: 'Drum Magazine',
 };

@@ -9,12 +9,15 @@ const PARTS = import.meta.glob('../assets/pix/*/*.png', { eager: true, query: '?
 
 const W = 64;
 const H = 32;
-const ORDER = ['stock', 'body', 'barrel', 'scope'] as const;
+// Back to front. The magazine is not in here: it is baked on its own.
+const ORDER = ['stock', 'body', 'barrel', 'under', 'scope'] as const;
 
 /** Where the bore ends in each baked sprite (sprite px, right-facing), found from the alpha at bake time. */
 export const pixMuzzle: Record<string, { x: number; y: number }> = {};
 
 export const pixGunKey = (shape: string): string => `pixgun_${shape}`;
+/** The magazine is its own texture so the HUD can drop it out of the well on reload. */
+export const pixMagKey = (shape: string): string => `pixmag_${shape}`;
 export const pixPartKey = (slot: string, name: string): string => `pix_${slot}_${name}`;
 
 /** Queue every part for loading. Call from a scene's preload. */
@@ -113,5 +116,21 @@ export function bakePixGuns(scene: Phaser.Scene): void {
     octx.scale(-1, 1);
     octx.drawImage(work, 0, 0);
     scene.textures.addCanvas(key, out)?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+    // The magazine: a small right-facing sprite, recoloured with the same finish.
+    const mkey = pixMagKey(shape);
+    if (!scene.textures.exists(mkey)) {
+      const msrc = scene.textures.get(pixPartKey('mag', kit.mag.part)).getSourceImage() as HTMLImageElement;
+      const mc = document.createElement('canvas');
+      mc.width = msrc.width;
+      mc.height = msrc.height;
+      const mctx = mc.getContext('2d', { willReadFrequently: true });
+      if (!mctx) continue;
+      mctx.drawImage(msrc, 0, 0);
+      const mimg = mctx.getImageData(0, 0, mc.width, mc.height);
+      recolour(mimg, FINISHES[kit.finish]);
+      mctx.putImageData(mimg, 0, 0);
+      scene.textures.addCanvas(mkey, mc)?.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
   }
 }

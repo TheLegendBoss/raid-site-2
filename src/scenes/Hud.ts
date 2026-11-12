@@ -8,7 +8,7 @@ import { TUNING as T } from '../data/tuning';
 import { runState } from '../game/runState';
 import { clamp } from '../sim/math';
 import { GUN_KITS } from '../data/gunKits';
-import { pixGunKey, pixMuzzle } from '../fx/pixGun';
+import { pixGunKey, pixMagKey, pixMuzzle } from '../fx/pixGun';
 
 const FEED_LINES = 7;
 const BOLT_TRAVEL = 15; // px the bolt slides back
@@ -49,6 +49,7 @@ export class Hud extends Phaser.Scene {
   private bars!: Phaser.GameObjects.Graphics;
   private panel!: Phaser.GameObjects.Graphics;
   private gunImg!: Phaser.GameObjects.Image;
+  private magImg!: Phaser.GameObjects.Image;
   private gunFx!: Phaser.GameObjects.Graphics;
   private cross!: Phaser.GameObjects.Graphics;
   private shieldLabel!: Txt;
@@ -113,6 +114,7 @@ export class Hud extends Phaser.Scene {
     this.chrome = this.add.graphics().setDepth(4);
     this.bars = this.add.graphics().setDepth(5);
     this.panel = this.add.graphics().setDepth(5);
+    this.magImg = this.add.image(0, 0, 'pixmag_smg').setOrigin(0, 0).setDepth(5.5).setVisible(false);
     this.gunImg = this.add.image(0, 0, 'pixgun_smg').setOrigin(0, 0).setDepth(6).setVisible(false);
     this.gunFx = this.add.graphics().setDepth(7);
     this.cross = this.add.graphics().setDepth(9);
@@ -536,7 +538,7 @@ export class Hud extends Phaser.Scene {
     }
 
     this.setText(this.weaponName, s.weaponName.toUpperCase());
-    this.drawGun(s.weaponShape, gx, gy, bolt, magY, magA, s.mag, this.muzzle);
+    this.drawGun(s.weaponShape, gx, gy, bolt, magY, magA, this.muzzle);
     this.drawCasings(dt);
 
     // Rounds remaining, as cells.
@@ -681,7 +683,7 @@ export class Hud extends Phaser.Scene {
    * kicks back with the bolt), the magazine drops out of the well and seats again on reload, and
    * the muzzle flash sits on the barrel end.
    */
-  private drawGun(shape: string, gx: number, gy: number, bolt: number, magY: number, magA: number, mag: number, muzzle: number): void {
+  private drawGun(shape: string, gx: number, gy: number, bolt: number, magY: number, magA: number, muzzle: number): void {
     const kit = GUN_KITS[shape] ?? GUN_KITS.smg;
     const key = pixGunKey(GUN_KITS[shape] ? shape : 'smg');
     const sc = T.pixGun.scale;
@@ -689,26 +691,13 @@ export class Hud extends Phaser.Scene {
     const iy = gy + T.pixGun.y;
     this.gunImg.setTexture(key).setPosition(ix, iy).setScale(sc).setVisible(true);
 
-    const g = this.panel;
-    const [mx, my, mw, mh] = kit.mag;
-    const mxp = gx + T.pixGun.x + mx * sc;
-    const myp = iy + my * sc + magY;
-    const mwp = mw * sc;
-    const mhp = mh * sc;
-    if (magA > 0.01) {
-      // Hard-edged, snapped to the sprite's pixel grid so it reads as part of the pixel gun.
-      const snap = (v: number): number => Math.round(v / sc) * sc;
-      const top = snap(myp);
-      g.fillStyle(0x0a0c0c, magA);
-      g.fillRect(mxp - sc, top - sc, mwp + 2 * sc, mhp + 2 * sc);
-      g.fillStyle(0x4e5450, magA);
-      g.fillRect(mxp, top, mwp, mhp);
-      g.fillStyle(0x2a2e2c, magA);
-      g.fillRect(mxp + mwp - sc, top, sc, mhp);
-      const rounds = clamp(Math.ceil((mag / runState.magSize) * 4), 0, 4);
-      g.fillStyle(PALETTE.ammo, magA);
-      for (let i = 0; i < rounds; i++) g.fillRect(mxp + sc, top + sc + i * (2 * sc), mwp - 3 * sc, sc);
-    }
+    // The magazine sits in its well behind the gun and drops out and back in on reload.
+    this.magImg
+      .setTexture(pixMagKey(GUN_KITS[shape] ? shape : 'smg'))
+      .setPosition(gx + T.pixGun.x + kit.mag.x * sc, iy + kit.mag.y * sc + magY)
+      .setScale(sc)
+      .setAlpha(magA)
+      .setVisible(magA > 0.01);
 
     const f = this.gunFx;
     f.clear();
