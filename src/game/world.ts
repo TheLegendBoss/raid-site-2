@@ -51,6 +51,7 @@ export class World {
   dead = false;
   deadTimer = 0;
   hitStop = 0;
+  fullWarn = 0; // seconds until the next 'Pack full' warning
 
   // camera
   camX = W / 2;

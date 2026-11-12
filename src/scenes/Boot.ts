@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { generateTextures } from '../fx/textures';
+import { loadProfile } from '../game/profile';
 import { CLONE_PARTS } from '../fx/playerRig';
 import bodyUrl from '../assets/art/clone_body.png?url';
 import headUrl from '../assets/art/clone_head.png?url';
@@ -29,7 +30,10 @@ export class Boot extends Phaser.Scene {
   create(): void {
     generateTextures(this);
     for (const key of CLONE_PARTS) this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
-    this.scene.start('FeelTest');
-    this.scene.launch('Hud');
+    // Load the save (a file on desktop, localStorage in a browser) before the room starts.
+    void loadProfile().then(() => {
+      this.scene.start('FeelTest');
+      this.scene.launch('Hud');
+    });
   }
 }

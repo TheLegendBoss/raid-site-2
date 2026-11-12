@@ -1,18 +1,9 @@
 import { defineConfig } from 'vite';
-import { viteSingleFile } from 'vite-plugin-singlefile';
 
-// `vite build` makes the normal multi-file build in dist/.
-// `vite build --mode release` inlines everything into one index.html in
-// dist-release/ so it runs by double-click from disk, or from any web host.
-export default defineConfig(({ mode }) => {
-  const release = mode === 'release';
-  return {
-    base: './',
-    server: { port: 5173 },
-    plugins: release ? [viteSingleFile()] : [],
-    build: {
-      outDir: release ? 'dist-release' : 'dist',
-      chunkSizeWarningLimit: 2000,
-    },
-  };
+// `npm run dev` serves the game for development in a browser.
+// `npm run build:web` makes dist/, which the Electron shell serves (see electron/main.cjs).
+export default defineConfig({
+  base: './',
+  server: { port: 5173 },
+  build: { outDir: 'dist', chunkSizeWarningLimit: 2000 },
 });

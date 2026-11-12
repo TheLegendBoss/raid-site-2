@@ -1,4 +1,5 @@
 import { TUNING as T } from '../../data/tuning';
+import { profile, saveProfile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE, RARITY_COLORS } from '../../data/palette';
 import { X0, X1, Y0, Y1 } from '../../data/arena';
@@ -59,6 +60,7 @@ export class LootSystem {
 
   updateDrops(dt: number): void {
     const L = T.loot;
+    this.w.fullWarn -= dt;
     const now = this.g.scene.time.now / 1000;
     for (let i = this.w.drops.length - 1; i >= 0; i--) {
       const d = this.w.drops[i];
@@ -69,8 +71,9 @@ export class LootSystem {
       const dx = this.w.px - d.x;
       const dy = this.w.py - d.y;
       const dist = Math.hypot(dx, dy);
-      if (d.age > L.magnetDelay && dist < L.magnetRadius) {
-        const pull = L.magnetSpeed * (1 - dist / L.magnetRadius * 0.5);
+      const magnet = profile.stats.magnetRadius;
+      if (d.age > L.magnetDelay && dist < magnet) {
+        const pull = L.magnetSpeed * (1 - dist / magnet * 0.5);
         d.vx += (dx / Math.max(dist, 1)) * pull * dt * 6;
         d.vy += (dy / Math.max(dist, 1)) * pull * dt * 6;
       }
@@ -81,6 +84,15 @@ export class LootSystem {
       d.beam?.setPosition(d.x, d.y);
 
       if (dist < L.pickupRadius && d.age > 0.15) {
+        if (runState.carried.length >= profile.stats.carrySlots) {
+          // Pack full: the item stays on the floor until there is room.
+          if (this.w.fullWarn <= 0) {
+            pushFeed('Pack full', PALETTE.hostile);
+            this.g.sfx.empty();
+            this.w.fullWarn = 1.2;
+          }
+          continue;
+        }
         const color = RARITY_COLORS[d.item.rarity];
         runState.carried.push(d.item);
         pushFeed(`${d.item.rarityLabel} ${d.item.name}`, color);
@@ -109,5 +121,6 @@ export class LootSystem {
     setBanner('EXTRACTED', 1.4);
     this.g.sfx.pickup(5);
     this.g.ring(this.w.px, this.w.py, PALETTE.structure, 0.6, 7);
+    saveProfile();
   }
 }

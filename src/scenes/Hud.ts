@@ -2,6 +2,7 @@
 // Static chrome (plates, brackets) is drawn once and again only on resize; the Graphics that change
 // every frame hold just the fills, icons and the weapon animation.
 import Phaser from 'phaser';
+import { profile } from '../game/profile';
 import { FONT, PALETTE, hex } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { runState } from '../game/runState';
@@ -70,6 +71,7 @@ export class Hud extends Phaser.Scene {
   private cursorAmmo!: Txt;
   private feedTexts: Txt[] = [];
   private textCache = new Map<Txt, string>();
+  private pointerSeen = false;
 
   private chromeW = 0;
   private chromeH = 0;
@@ -162,7 +164,7 @@ export class Hud extends Phaser.Scene {
         'RMB / F arc blade',
         'blade kills refund reserve ammo + shield',
         '1 swarm   2 robot   K clear   T reset room',
-        'X extract   M mute   H hide help',
+        'X extract   TAB trees   M mute   H hide help',
       ].join('\n'),
     );
   }
@@ -387,7 +389,7 @@ export class Hud extends Phaser.Scene {
     const g = this.bars;
     this.setText(
       this.carryText,
-      `CARRIED ${s.carried.length}   STASH ${s.stash.length}   [X] extract (carried is lost on death)`,
+      `CARRIED ${s.carried.length}/${profile.stats.carrySlots}   STASH ${s.stash.length}   INTEL ${profile.intel}   [X] extract   [TAB] trees`,
     );
     this.carryText.setPosition(w / 2, h - MARGIN);
     const cw = this.carryText.width + 28;
@@ -694,6 +696,15 @@ export class Hud extends Phaser.Scene {
     const g = this.cross;
     const p = this.input.activePointer;
     g.clear();
+    // The pointer sits at 0,0 until the first mouse event; do not draw a crosshair there.
+    if (!this.pointerSeen) {
+      if (p.x === 0 && p.y === 0) {
+        this.cursorAmmo.setText('');
+        this.textCache.delete(this.cursorAmmo);
+        return;
+      }
+      this.pointerSeen = true;
+    }
     const gap = 6 + s.aimSpread * 2.6;
     const len = 8;
     const reloading = s.reload >= 0;

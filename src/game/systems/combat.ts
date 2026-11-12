@@ -1,4 +1,5 @@
 import { TUNING as T } from '../../data/tuning';
+import { profile } from '../profile';
 import { PALETTE } from '../../data/palette';
 import { drawBar } from '../../fx/mobArt';
 import { runState } from '../runState';
@@ -149,9 +150,11 @@ export class CombatSystem {
 
   refundOnKill(): void {
     const S = T.sword;
-    runState.reserve = Math.min(runState.maxReserve, runState.reserve + S.reserveRefund);
-    this.g.nums.spawn(this.w.px, this.w.py - 30, `+${S.reserveRefund}`, 'refund');
-    runState.shield = Math.min(runState.maxShield, runState.shield + S.shieldRefund);
+    const mult = profile.stats.bladeRefund;
+    const ammo = Math.round(S.reserveRefund * mult);
+    runState.reserve = Math.min(runState.maxReserve, runState.reserve + ammo);
+    this.g.nums.spawn(this.w.px, this.w.py - 30, `+${ammo}`, 'refund');
+    runState.shield = Math.min(runState.maxShield, runState.shield + S.shieldRefund * mult);
     runState.refundFlash = 1;
     this.g.sfx.kill(1 + Math.min(runState.combo, 9) * 0.07);
     this.g.ring(this.w.px, this.w.py, PALETTE.ammo, 0.28, 3.2);

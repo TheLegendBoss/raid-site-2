@@ -12,17 +12,20 @@ The MVP plan (loop, gear, floors, enemies, order of work) is in [docs/design.md]
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # typecheck + production build
+npm run dev        # browser, http://localhost:5173 (saves go to localStorage)
+npm run desktop    # builds the game and opens it in the Electron shell
+npm run build      # typecheck + web build into dist/
 ```
 
 Click the page once so the browser allows audio.
 
-## Download
+## Download (Windows .exe)
 
-Grab `raid-site-2-vX.Y.Z.html` from the [Releases page](https://github.com/TheLegendBoss/raid-site-2/releases) and double-click it. It is one self-contained file with no server or install needed.
+The game ships as a **portable Windows .exe**: one file, no installer. Grab `raid-site-2-X.Y.Z-portable.exe` from the [Releases page](https://github.com/TheLegendBoss/raid-site-2/releases) and double-click it. It is unsigned, so Windows SmartScreen may warn: choose *More info*, then *Run anyway*. F11 toggles fullscreen.
 
-To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. The `Release` workflow builds `npm run release` and attaches the file. To build it locally, run `npm run release` and open `dist-release/index.html`.
+Saves (Intel, unlocked tree nodes, stash) are a real file: `%APPDATA%\RAID SITE 2\save.json`, with the previous save kept as `save.bak`.
+
+To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. The `Release` workflow builds the .exe on a Windows runner and attaches it. **Actions > Release > Run workflow** builds one without a release and keeps it as a downloadable artifact. To build locally on Windows, run `npm run dist:win` (output in `release/`).
 
 ## Controls
 
@@ -35,6 +38,7 @@ To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z
 | Right mouse or F | Arc blade: wind-up, lunging cleave, bisects scavengers. 0.8s cooldown; kills refund reserve ammo and shield |
 | Shift or Space | Dash (brief invulnerability, 0.9s cooldown) |
 | X | Extract: bank carried loot into the stash |
+| Tab | Open the Research and Perk trees (spend Intel earned by clearing waves) |
 | 1 / 2 | Spawn a scavenger swarm / a robot |
 | K | Clear all hostiles |
 | T | Reset the room |
@@ -57,8 +61,9 @@ Blade kills refund ammo and shield, so wading in is rewarded over kiting. Dying 
 src/data/      palette and tuning: every tunable number lives here
 src/sim/       pure TypeScript (maths, loot rolls), no engine imports
 src/fx/        procedural WebAudio, pooled particles, baked textures
-src/scenes/    Boot, FeelTest (loop and wiring), Hud (its own scene)
-src/game/      run state the HUD reads, world state, systems/ (player, gun, blade, combat, mobs, loot, camera)
+src/scenes/    Boot, FeelTest (loop and wiring), Hud (its own scene), Tree (research and perks)
+electron/      desktop shell: serves dist/, writes the save file
+src/game/      run state the HUD reads, profile and save, world state, systems/ (player, gun, blade, combat, mobs, loot, camera)
 ```
 
 Tuning for gun, blade, enemies, camera shake, hit-stop and loot is in `src/data/tuning.ts`. Rarity weights and item names are in `src/data/loot.ts`.

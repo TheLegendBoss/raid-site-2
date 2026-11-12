@@ -18,6 +18,11 @@ export interface Item {
 
 let nextId = 1;
 
+/** After loading a save, keep new item ids clear of the saved ones. */
+export function seedItemIds(items: readonly Item[]): void {
+  for (const it of items) nextId = Math.max(nextId, it.id + 1);
+}
+
 function weightedIndex(rng: Rng, weights: readonly number[]): number {
   let total = 0;
   for (const w of weights) total += w;

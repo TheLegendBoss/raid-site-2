@@ -15,6 +15,7 @@ import { Glows } from '../fx/glows';
 import { Particles } from '../fx/particles';
 import { PlayerRig } from '../fx/playerRig';
 import { Ctx } from '../game/ctx';
+import { profile } from '../game/profile';
 import { resetVitals, runState, setBanner } from '../game/runState';
 import { BladeSystem } from '../game/systems/blade';
 import { CameraSystem } from '../game/systems/camera';
@@ -46,7 +47,7 @@ export class FeelTest extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.setDefaultCursor('none');
     g.keys = this.input.keyboard!.addKeys(
-      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO',
+      'W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,SPACE,F,X,R,K,M,T,H,ONE,TWO,TAB',
     ) as unknown as KeyMap;
 
     const unlock = (): void => g.sfx.unlock();
@@ -159,8 +160,8 @@ export class FeelTest extends Phaser.Scene {
 
   private syncState(): void {
     const s = runState;
-    s.dashReady = this.w.dashCd <= 0 ? 1 : 1 - this.w.dashCd / T.player.dashCooldown;
-    s.bladeReady = this.w.swordCd <= 0 ? 1 : 1 - this.w.swordCd / T.sword.cooldown;
+    s.dashReady = this.w.dashCd <= 0 ? 1 : 1 - this.w.dashCd / profile.stats.dashCooldown;
+    s.bladeReady = this.w.swordCd <= 0 ? 1 : 1 - this.w.swordCd / profile.stats.bladeCooldown;
     if (this.w.prevDashReady < 1 && s.dashReady >= 1) s.dashPing = 1;
     if (this.w.prevBladeReady < 1 && s.bladeReady >= 1) s.bladePing = 1;
     this.w.prevDashReady = s.dashReady;
@@ -168,7 +169,7 @@ export class FeelTest extends Phaser.Scene {
     s.wave = this.w.wave;
     s.mobsAlive = this.w.mobs.filter((m) => !m.dead).length + this.w.spawnQueue.length;
     s.intermission = this.w.waveLive ? 0 : Math.max(0, this.w.waveTimer);
-    s.aimSpread = T.gun.spread + this.w.bloom;
+    s.aimSpread = profile.stats.spread + this.w.bloom;
     s.muted = this.g.sfx.muted;
   }
 
@@ -180,6 +181,12 @@ export class FeelTest extends Phaser.Scene {
     this.w.aim = Math.atan2(this.w.mouseY - this.w.py, this.w.mouseX - this.w.px);
   }
 
+  private openTree(): void {
+    this.scene.pause();
+    this.scene.launch('Tree', { sfx: this.g.sfx });
+    this.scene.bringToTop('Tree');
+  }
+
   private handleDebugKeys(): void {
     const K = Phaser.Input.Keyboard;
     if (K.JustDown(this.g.keys.ONE)) this.g.mobSys.queueSwarm(T.waves.swarmSize);
@@ -189,6 +196,7 @@ export class FeelTest extends Phaser.Scene {
     if (K.JustDown(this.g.keys.H)) runState.showHelp = !runState.showHelp;
     if (K.JustDown(this.g.keys.M)) this.g.sfx.setMuted(!this.g.sfx.muted);
     if (K.JustDown(this.g.keys.X)) this.g.lootSys.extract();
+    if (K.JustDown(this.g.keys.TAB)) this.openTree();
   }
 
   private resetWorld(first: boolean): void {

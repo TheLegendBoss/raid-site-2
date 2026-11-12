@@ -1,4 +1,5 @@
 import { TUNING as T } from '../../data/tuning';
+import { profile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE } from '../../data/palette';
 import { runState } from '../runState';
@@ -42,7 +43,7 @@ export class BladeSystem {
         sw.state = 'windup';
         sw.t = 0;
         sw.dir = sw.dir === 1 ? -1 : 1;
-        this.w.swordCd = S.cooldown;
+        this.w.swordCd = profile.stats.bladeCooldown;
         this.g.sfx.windup();
       }
       return;
@@ -92,7 +93,7 @@ export class BladeSystem {
   }
 
   drawBlade(theta: number, alpha: number, trailDir: number): void {
-    const S = T.sword;
+    const reach = profile.stats.bladeReach;
     const g = this.g.bladeGfx;
     g.clear();
     const ox = this.w.px;
@@ -103,35 +104,36 @@ export class BladeSystem {
         const a = theta - trailDir * i * 8 * DEG;
         const t = 1 - i / 8;
         g.lineStyle(5 - i * 0.4, 0x7fe8ff, t * 0.55 * alpha);
-        g.lineBetween(ox + Math.cos(a) * 26, oy + Math.sin(a) * 26, ox + Math.cos(a) * S.reach, oy + Math.sin(a) * S.reach);
+        g.lineBetween(ox + Math.cos(a) * 26, oy + Math.sin(a) * 26, ox + Math.cos(a) * reach, oy + Math.sin(a) * reach);
       }
     }
     const cs = Math.cos(theta);
     const sn = Math.sin(theta);
     g.lineStyle(9, 0x7fe8ff, 0.3 * alpha);
-    g.lineBetween(ox + cs * 22, oy + sn * 22, ox + cs * S.reach, oy + sn * S.reach);
+    g.lineBetween(ox + cs * 22, oy + sn * 22, ox + cs * reach, oy + sn * reach);
     g.lineStyle(4, 0xffffff, alpha);
-    g.lineBetween(ox + cs * 22, oy + sn * 22, ox + cs * S.reach, oy + sn * S.reach);
+    g.lineBetween(ox + cs * 22, oy + sn * 22, ox + cs * reach, oy + sn * reach);
     this.g.bladeGlow
       .setVisible(true)
-      .setPosition(ox + cs * S.reach * 0.8, oy + sn * S.reach * 0.8)
+      .setPosition(ox + cs * reach * 0.8, oy + sn * reach * 0.8)
       .setScale(0.9)
       .setAlpha(0.55 * alpha);
   }
 
   bladeHits(theta: number): void {
     const S = T.sword;
+    const reach = profile.stats.bladeReach;
     for (const m of this.w.mobs) {
       if (m.dead || this.w.sw.hit.has(m)) continue;
       const dx = m.x - this.w.px;
       const dy = m.y - this.w.py;
       const d = Math.hypot(dx, dy);
-      if (d > S.reach + m.radius) continue;
+      if (d > reach + m.radius) continue;
       const ang = Math.atan2(dy, dx);
       const tol = S.hitTolerance * DEG + Math.asin(Math.min(1, m.radius / Math.max(d, 1)));
       if (Math.abs(angleDiff(ang, theta)) > tol) continue;
       this.w.sw.hit.add(m);
-      this.g.combat.damageMob(m, rollDamage(this.g.rng, S.damage, S.damageVariance), ang, 'sword', m.x - Math.cos(ang) * m.radius * 0.5, m.y - Math.sin(ang) * m.radius * 0.5, theta);
+      this.g.combat.damageMob(m, rollDamage(this.g.rng, profile.stats.bladeDamage, S.damageVariance), ang, 'sword', m.x - Math.cos(ang) * m.radius * 0.5, m.y - Math.sin(ang) * m.radius * 0.5, theta);
     }
     // The blade also cuts incoming fire out of the air.
     for (const b of this.w.bullets) {
@@ -139,7 +141,7 @@ export class BladeSystem {
       const dx = b.x - this.w.px;
       const dy = b.y - this.w.py;
       const d = Math.hypot(dx, dy);
-      if (d > S.reach + 8) continue;
+      if (d > reach + 8) continue;
       if (Math.abs(angleDiff(Math.atan2(dy, dx), theta)) > S.hitTolerance * DEG + 0.2) continue;
       b.active = false;
       b.img.setVisible(false);

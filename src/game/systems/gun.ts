@@ -1,4 +1,5 @@
 import { TUNING as T } from '../../data/tuning';
+import { profile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE } from '../../data/palette';
 import { X0, X1, Y0, Y1, PILLARS } from '../../data/arena';
@@ -43,7 +44,7 @@ export class GunSystem {
     s.mag -= 1;
     s.shotSeq += 1;
     this.w.fireCd = G.fireDelay;
-    const cone = (G.spread + this.w.bloom) * DEG;
+    const cone = (profile.stats.spread + this.w.bloom) * DEG;
     // The gun is held straight out on the clone's right, so it fires from the muzzle and converges on the cursor.
     const ca = Math.cos(this.w.aim);
     const sa = Math.sin(this.w.aim);
@@ -53,7 +54,7 @@ export class GunSystem {
       ? Math.atan2(this.w.mouseY - my, this.w.mouseX - mx)
       : this.w.aim;
     const a = toCursor + (Math.random() - 0.5) * 2 * cone;
-    const dmg = rollDamage(this.g.rng, G.damage, G.damageVariance);
+    const dmg = rollDamage(this.g.rng, profile.stats.gunDamage, G.damageVariance);
     this.fireBullet(mx, my, a, G.bulletSpeed, dmg, true, G.bulletLife, 0xe9fff6, 28, 2.6);
     this.w.bloom = Math.min(5.5, this.w.bloom + 0.9);
     if (s.mag < 1 && s.reserve >= 1) this.startReload();
@@ -81,11 +82,10 @@ export class GunSystem {
   }
 
   startReload(): void {
-    const G = T.gun;
     const s = runState;
     if (this.w.reloadT >= 0 || s.mag >= s.magSize || s.reserve < 1) return;
     this.w.reloadWasEmpty = s.mag < 1;
-    this.w.reloadTime = this.w.reloadWasEmpty ? G.reloadTimeEmpty : G.reloadTime;
+    this.w.reloadTime = this.w.reloadWasEmpty ? profile.stats.reloadTimeEmpty : profile.stats.reloadTime;
     this.w.reloadT = 0;
     this.w.reloadMagIn = false;
     s.reload = 0;

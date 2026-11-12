@@ -36,3 +36,14 @@ export const FONT = '"Space Mono", ui-monospace, SFMono-Regular, Menlo, Consolas
 export function hex(n: number): string {
   return '#' + n.toString(16).padStart(6, '0');
 }
+
+// Tree node tints, one per branch family.
+export const TREE_TINTS = {
+  cyan: 0x56e0ff,
+  amber: 0xffc24a,
+  red: 0xff6a5e,
+  green: 0x62f08f,
+  violet: 0xa98bff,
+  orange: 0xff9244,
+} as const;
+export type TreeTint = keyof typeof TREE_TINTS;

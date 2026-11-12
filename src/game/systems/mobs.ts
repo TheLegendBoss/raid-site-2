@@ -3,7 +3,8 @@ import Phaser from 'phaser';
 import { PALETTE } from '../../data/palette';
 import { PILLARS, PIPES } from '../../data/arena';
 import { drawBar, drawMob } from '../../fx/mobArt';
-import { setBanner } from '../runState';
+import { pushFeed, setBanner } from '../runState';
+import { waveIntel } from '../profile';
 import { collide } from '../../sim/collide';
 import { angleDiff, clamp, segmentIntersectsRect } from '../../sim/math';
 import type { Mob, MobKind } from '../types';
@@ -64,6 +65,8 @@ export class MobSystem {
         this.w.waveLive = false;
         this.w.waveTimer = T.waves.intermission;
         setBanner('WAVE CLEARED', 1.8);
+        const intel = waveIntel(this.w.wave);
+        pushFeed(`+${intel} Intel`, PALETTE.robot);
       }
     } else {
       this.w.waveTimer -= dt;

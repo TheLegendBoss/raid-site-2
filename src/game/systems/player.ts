@@ -1,4 +1,5 @@
 import { TUNING as T } from '../../data/tuning';
+import { profile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE } from '../../data/palette';
 
@@ -46,7 +47,7 @@ export class PlayerSystem {
       if (dashPressed) {
         if (this.w.dashCd <= 0 && this.w.sw.state !== 'swing') {
           this.w.dashT = P.dashTime;
-          this.w.dashCd = P.dashCooldown;
+          this.w.dashCd = profile.stats.dashCooldown;
           this.w.dashX = moving ? ix : Math.cos(this.w.aim);
           this.w.dashY = moving ? iy : Math.sin(this.w.aim);
           this.g.sfx.dash();
@@ -60,8 +61,8 @@ export class PlayerSystem {
         }
       }
       const factor = this.w.sw.state === 'windup' || this.w.sw.state === 'swing' ? P.swingMoveFactor : 1;
-      const tvx = ix * P.maxSpeed * factor;
-      const tvy = iy * P.maxSpeed * factor;
+      const tvx = ix * profile.stats.moveSpeed * factor;
+      const tvy = iy * profile.stats.moveSpeed * factor;
       const dvx = tvx - this.w.pvx;
       const dvy = tvy - this.w.pvy;
       const len = Math.hypot(dvx, dvy);
@@ -97,7 +98,7 @@ export class PlayerSystem {
     // Shield regen.
     this.w.shieldCd -= dt;
     if (this.w.shieldCd <= 0 && runState.shield < runState.maxShield) {
-      runState.shield = Math.min(runState.maxShield, runState.shield + P.shieldRegenRate * dt);
+      runState.shield = Math.min(runState.maxShield, runState.shield + profile.stats.shieldRegenRate * dt);
     }
 
     // Flash on hurt.
@@ -113,7 +114,7 @@ export class PlayerSystem {
     }
 
     this.g.rig.setDashing(this.w.dashT > 0);
-    this.g.rig.update(dt, Math.hypot(this.w.px - ox, this.w.py - oy), Math.hypot(this.w.pvx, this.w.pvy) / P.maxSpeed);
+    this.g.rig.update(dt, Math.hypot(this.w.px - ox, this.w.py - oy), Math.hypot(this.w.pvx, this.w.pvy) / profile.stats.moveSpeed);
     this.g.rig.setPose(this.w.px, this.w.py, this.w.aim);
     this.g.shieldGfx
       .setPosition(this.w.px, this.w.py)
@@ -123,7 +124,7 @@ export class PlayerSystem {
   hurtPlayer(dmg: number, fromAngle: number): void {
     if (this.w.dashT > 0 || this.w.dead) return;
     const s = runState;
-    this.w.shieldCd = T.player.shieldRegenDelay;
+    this.w.shieldCd = profile.stats.shieldRegenDelay;
     const hadShield = s.shield > 0;
     const soak = Math.min(s.shield, dmg);
     s.shield -= soak;

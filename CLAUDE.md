@@ -17,6 +17,7 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 - Draw static art once. Redraw a Graphics only when state changes (see the hit-flash toggle in `src/fx/mobArt.ts`). RenderTexture draw calls are buffered: call `render()` after stamping.
 - HUD is its own scene (`Hud`) so game camera shake and zoom never move it. Game to HUD communication goes through `src/game/runState.ts`.
 - Feel is the product. Hit-stop, shake, light flashes, shatter debris and layered sound live in `src/fx/` and `src/game/systems/`; keep their numbers in `tuning.ts`.
+- The game ships as a Windows .exe (Electron shell in `electron/`, built by `.github/workflows/release.yml`). Development stays in a browser (`npm run dev`). Saves go through `src/game/host.ts`: a file via the Electron bridge on desktop, localStorage in a browser. Never read or write storage directly elsewhere.
 - Before finishing a change: `npm run typecheck`, `npm run build`, and actually run it in a browser. Type checks do not catch feel, layout or input bugs.
 
 ## Combat model
@@ -24,7 +25,13 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 - The SMG uses a magazine plus reserve (`TUNING.gun`). Reload state, dash/blade cooldown fractions and the shot counter reach the HUD through `runState` (`reload`, `shotSeq`, `dashReady`, `bladeReady`, ping/deny flashes). The HUD animates the bolt, magazine and ejected casings from those fields.
 - Damage is rolled in `src/sim/damage.ts` (`rollDamage`) and shown as pooled floating numbers (`TUNING.numbers`).
 - Keys: R reload, T reset room, H toggle help.
-- The Neo Zero tileset is not in the repo: its licence forbids redistribution and use in anything where the assets can be extracted (a public repo or single-file release would qualify). Do not commit it without the owner's decision.
+- The Neo Zero tileset is not in the repo: its licence forbids redistribution and use in anything where the assets can be extracted (a public repo or any release build, including the .exe, would qualify). Do not commit it without the owner's decision.
+
+## Trees and stats
+
+- Research and Perks are node trees in `src/data/tree.ts` (main nodes on a grid, chip nodes under a parent, bought with Intel, parent first). Unlock rules live in `src/sim/tree.ts`. The tree screen is `src/scenes/Tree.ts` (Tab in the room).
+- Combat reads `profile.stats` (`EffectiveStats`, resolved in `src/sim/stats.ts` from base tuning plus unlocked effects), never `TUNING.gun` or `TUNING.player` for anything a node can change. To add a stat: add a `StatKey`, a base value in `stats.ts`, a label in `STAT_LABELS`, then read it from `profile.stats`.
+- `src/game/profile.ts` owns the persistent profile (Intel, unlocked ids, stash) and writes a versioned save. Bump `SAVE_VERSION` and migrate when the shape changes.
 
 ## Art pipeline (character parts)
 

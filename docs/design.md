@@ -118,10 +118,26 @@ Enough variety that choosing matters. About 14 base items.
 
 - **Scrap** is the only currency. It drops from enemies and containers, and every item sells for scrap by rarity.
 - **Quartermaster** buys and sells only. It sells common and uncommon gear at fair prices, and a few rare items at steep prices, with stock that refreshes after each run. Epic and above are **never** sold. They come from silos, Wardens and vaults, so drops stay exciting. (Decided: no rerolls or upgrades in the MVP.)
-- **Stash:** 60 slots, saved locally between sessions (versioned save).
+- **Stash:** 60 slots, saved to a real file on desktop (`%APPDATA%\\RAID SITE 2\\save.json`, previous copy kept as `save.bak`), versioned.
 - **Costs:** respawn is free. The sinks for scrap are buying gear and expanding stash slots.
 - **Selling** at the base only. No selling in the field.
 - **Base growth** (post-MVP): population from claimed vaults unlocks new facilities.
+
+## 6b. Trees: research, perks and the armoury
+
+Modelled on the aircraft tree in a flight-combat game: one big pannable graph per tree. **Main nodes** (a box with a glyph, a name, a cost) sit on a grid and are joined by trunk lines to the node they need. Small **chip nodes** hang under a main node as cheap add-ons. A node shows one of four states: owned (check mark), ready (white border), too expensive (cost in red), or locked (dimmed until its parent is owned). Owned branches light up in the branch colour.
+
+| Tree | Spends | What it is | Status |
+|---|---|---|---|
+| **Research** | Intel | The programme: carry racks, ammo looms, Intel yield, shield cells and regen. Later also base facilities (stash size, quartermaster stock, research lab, clone vat) | **Live** |
+| **Perks** | Intel | Aug training: hull, mobility, gun handling, blade. Shared by every Aug, so it survives death | **Live** |
+| **Armoury** | Scrap | Gear lines (guns, blades, armour, packs). A main node unlocks an item for the quartermaster and shows how many you own (the "x1" on a flight-tree aircraft). Chips under it are fixed signature traits | Next, with items and the quartermaster |
+
+- **Intel** is earned by clearing waves in the feel-test room (10 + 5 per wave, scaled by the Intel Gained stat). In silos it comes from clearing rooms, terminals and Wardens. **Scrap** stays the gear currency (section 6).
+- A node does one or two plain things (flat or percent changes to a stat). No hidden mechanics, so a tree can be read at a glance.
+- Data lives in `src/data/tree.ts`; unlock rules in `src/sim/tree.ts`; resolved numbers in `src/sim/stats.ts` (`EffectiveStats`); the screen is `src/scenes/Tree.ts`. Tab opens it from the room. In the base it becomes a facility.
+- Research is the **programme's** knowledge and perks are the **Augs'** training. Both persist when an Aug dies, which matches the setting: the Augs are disposable, the programme is not.
+- **Open for the owner:** should a few perks be exclusive picks (choose one of two chips) so builds differ, or should everything be buyable eventually? Currently everything is buyable.
 
 ## 7. Silos: floors and rooms
 
@@ -177,8 +193,9 @@ Every hit has hit-stop, shake, light flash, damage number and layered sound. Hum
 
 ## 10. Technical plan and order of work
 
+0. **Ship as a Windows .exe** (done): Electron shell, portable build from CI, real save file. Development stays in a browser.
 1. **Split `FeelTest`** (done): the scene is now a 240-line loop; state lives in `src/game/world.ts`, rules in `src/game/systems/` (player, gun, blade, combat, mobs, loot, camera), effects in `src/fx/`, arena data in `src/data/arena.ts`.
-2. **Stats and items:** `items.ts`, `stats.ts`, equip panel, stash saves.
+2. **Stats, trees and saves** (stats, saves, Research and Perks done): `stats.ts`, `profile.ts`, `tree.ts`. Still to do: `items.ts`, equip panel, Armoury tree.
 3. **Base:** stash screen and quartermaster.
 4. **Silo generator:** templates, seeded graph, doors, key and gate, extract points, a debug view of the graph.
 5. **Humans:** redraw and implement the roster above.
@@ -190,7 +207,7 @@ Rule for every step: `npm run typecheck`, `npm run build`, run it in a browser. 
 
 ## 11. Out of scope for the MVP
 
-Vaults, lockdown points, population and base growth, the finite Aug pool, research, perks and cloning, the background Augs, random affixes, crafting and upgrades, a Module slot, weapon swapping mid-run, co-op, a world map, multiple characters, story cutscenes, music.
+Vaults, lockdown points, population and base growth, the finite Aug pool, cloning, base-facility research, the background Augs, random affixes, crafting and upgrades, a Module slot, weapon swapping mid-run, co-op, a world map, multiple characters, story cutscenes, music.
 
 ## 12. Open questions
 

@@ -1,17 +1,20 @@
 name: Release
 
-# Pushing a tag like v0.2.0 builds the single-file game and attaches it to a
-# GitHub Release. If the release already exists, the asset is replaced.
+# The game ships as a Windows .exe (a portable build: one file, no installer).
+# Pushing a tag like v0.2.0 builds it and attaches it to a GitHub Release.
+# "Run workflow" on the Actions tab builds it without a release and keeps the
+# .exe as a downloadable build artifact for testing.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -22,17 +25,23 @@ jobs:
 
       - run: npm ci
 
-      - name: Typecheck and build the single-file release
-        run: npm run release
+      - name: Typecheck, build the game and package the .exe
+        run: npm run dist:win
 
-      - name: Name the asset after the tag
-        run: cp dist-release/index.html "raid-site-2-${GITHUB_REF_NAME}.html"
+      - name: Keep the build as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raid-site-2-windows
+          path: release/*.exe
+          if-no-files-found: error
 
-      - name: Publish the release
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          asset="raid-site-2-${GITHUB_REF_NAME}.html"
+          asset=$(ls release/*.exe | head -n 1)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
           else
