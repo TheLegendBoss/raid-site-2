@@ -4,6 +4,10 @@ A cloned super soldier pushes into a network of sealed, derelict sites. Looter s
 
 This repo starts as a **feel test**: one arena, one SMG, one power blade, scavenger swarms and rogue robots. The only question it answers is whether being the soldier feels heavy and good for ten minutes. Design docs come after the answer is yes.
 
+## Design
+
+The MVP plan (loop, gear, floors, enemies, order of work) is in [docs/design.md](docs/design.md).
+
 ## Run
 
 ```bash
