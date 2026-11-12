@@ -10,6 +10,7 @@ import swordUrl from '../assets/art/clone_sword.png?url';
 import armsPistolUrl from '../assets/art/clone_arms_pistol.png?url';
 import armsShotgunUrl from '../assets/art/clone_arms_shotgun.png?url';
 import armsMarksmanUrl from '../assets/art/clone_arms_marksman.png?url';
+import armsMagnumUrl from '../assets/art/clone_arms_magnum.png?url';
 import armsBurstUrl from '../assets/art/clone_arms_burst.png?url';
 import cleaverUrl from '../assets/art/clone_cleaver.png?url';
 import stilettoUrl from '../assets/art/clone_stiletto.png?url';
@@ -23,6 +24,7 @@ const CLONE_URLS: Record<(typeof CLONE_PARTS)[number], string> = {
   clone_arms_pistol: armsPistolUrl,
   clone_arms_shotgun: armsShotgunUrl,
   clone_arms_marksman: armsMarksmanUrl,
+  clone_arms_magnum: armsMagnumUrl,
   clone_arms_burst: armsBurstUrl,
   clone_cleaver: cleaverUrl,
   clone_stiletto: stilettoUrl,

@@ -96,6 +96,17 @@ const pistol = () => [                                                          
   rect(57, SY + 2.2, 2.4, 1.1, { r: 0.4, fill: "au" }),                                           // ejection port
 ]
 
+const magnum = () => [                                                                          // muzzle x=69.6
+  rect(54, SY - 3, 8, 6, { r: 1.2, fill: lin(["m3", "m1"], 90), stroke: "k", sw: 1 }),           // frame
+  circle(59.5, SY, 3.4, { fill: lin(["m2", "m0"], 90), stroke: "k", sw: 0.9 }),                  // cylinder
+  circle(59.5, SY, 1.2, { fill: "k" }),
+  rect(61, SY - 2.4, 8.6, 3.4, { r: 0.6, fill: "m1", stroke: "k", sw: 0.8 }),                    // heavy barrel
+  rect(62, SY + 0.9, 6.4, 1.9, { r: 0.5, fill: "m2", stroke: "k", sw: 0.7 }),                    // underlug
+  rect(68.4, SY - 2.8, 1.2, 4.2, { r: 0.4, fill: "m2", stroke: "k", sw: 0.7 }),                  // muzzle
+  rect(52.2, SY - 4.2, 2.6, 2.2, { r: 0.5, fill: "m2", stroke: "k", sw: 0.6 }),                  // hammer
+  rect(65, SY - 3.7, 2.6, 1.3, { r: 0.4, fill: "rd" }),                                           // front sight
+]
+
 const shotgun = () => [                                                                         // muzzle x=71.8
   rect(44, SY - 2.4, 8, 4.8, { r: 1, fill: "m1", stroke: "k", sw: 0.9 }),                        // stock
   rect(51, SY - 2.8, 10, 5.6, { r: 1, fill: lin(["m3", "m1"], 90), stroke: "k", sw: 1 }),        // receiver
@@ -143,6 +154,7 @@ const arms = (name, weapon) => sprite(name, { w: 72, h: 64 },
 
 arms("clone_arms", smg)
 arms("clone_arms_pistol", pistol)
+arms("clone_arms_magnum", magnum)
 arms("clone_arms_shotgun", shotgun)
 arms("clone_arms_marksman", marksman)
 arms("clone_arms_burst", burst)

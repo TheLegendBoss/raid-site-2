@@ -1,6 +1,7 @@
 // Turns an item into display stat lines (for the base screen). Pure TypeScript.
 import type { BaseItem } from '../data/items';
 import { RARITY_TIER } from '../data/loot';
+import { resolveWeapon } from './weapon';
 
 export interface StatLine {
   key: string;
@@ -20,16 +21,22 @@ const r1 = (n: number): string => (Math.round(n * 10) / 10).toString();
 export function statLines(base: BaseItem, rarity: number): StatLine[] {
   const t = RARITY_TIER[rarity];
   if (base.weapon) {
-    const w = base.weapon;
-    const dmg = w.damage * t;
-    const perPull = dmg * w.pellets * w.burstCount;
+    // Resolved at this rarity, so the lines show what an item of this rarity really fires with.
+    const w = resolveWeapon(base.weapon, rarity);
+    const perPull = w.damage * w.pellets * w.burstCount;
     const rate = w.burstCount / w.fireDelay;
+    const dps = perPull / (w.fireDelay + (w.burstCount - 1) * w.burstGap);
     return [
-      line('dmg', 'Damage', perPull, w.pellets > 1 ? `${r1(dmg)} x${w.pellets}` : w.burstCount > 1 ? `${r1(dmg)} x${w.burstCount}` : r1(dmg)),
+      line('dmg', 'Damage', perPull, w.pellets > 1 ? `${r1(w.damage)} x${w.pellets}` : w.burstCount > 1 ? `${r1(w.damage)} x${w.burstCount}` : r1(w.damage)),
+      line('dps', 'DPS', dps, r1(dps)),
       line('rate', 'Fire rate', rate, `${r1(rate)}/s`),
-      line('mag', 'Magazine', Math.round(w.mag * t), String(Math.round(w.mag * t))),
+      line('mag', 'Magazine', w.mag, String(w.mag)),
       line('reload', 'Reload', w.reload, `${r1(w.reload)}s`, false),
       line('spread', 'Spread', w.spread, `${r1(w.spread)}°`, false),
+      line('move', 'Spread on the move', w.moveSpread, `+${r1(w.moveSpread)}°`, false),
+      line('ap', 'Armour pen', w.ap, r1(w.ap)),
+      line('stagger', 'Stagger', w.stagger * w.pellets, String(Math.round(w.stagger * w.pellets * 100))),
+      line('mobility', 'Mobility', w.mobility, `${Math.round(w.mobility * 100)}%`),
       ...(w.pierce > 0 ? [line('pierce', 'Pierces', w.pierce, `${w.pierce}`)] : []),
     ];
   }

@@ -13,12 +13,12 @@ export const SLOT_LABELS: Record<Slot, string> = {
 };
 
 export type Family =
-  | 'smg' | 'pistol' | 'shotgun' | 'marksman' | 'burst'
+  | 'smg' | 'pistol' | 'magnum' | 'shotgun' | 'marksman' | 'burst'
   | 'arc' | 'cleaver' | 'stiletto'
   | 'plate' | 'rig' | 'pack';
 
 /** Which vector silhouette the HUD draws for the weapon. */
-export type GunShape = 'smg' | 'pistol' | 'shotgun' | 'marksman' | 'burst';
+export type GunShape = 'smg' | 'pistol' | 'magnum' | 'shotgun' | 'marksman' | 'burst';
 
 export interface WeaponDef {
   shape: GunShape;
@@ -43,7 +43,44 @@ export interface WeaponDef {
   recoilImpulse: number;
   cameraKick: number;
   shotTrauma: number;
-  sound: 'smg' | 'pistol' | 'shotgun' | 'rifle';
+  sound: 'smg' | 'pistol' | 'magnum' | 'shotgun' | 'rifle';
+  // ---- stats borrowed from Helldivers 2 and Intravenous 2 -------------------------------
+  /** Armour penetration. Compared with a target's armour: above it is full damage, level with it a
+   *  glancing blow, below it most of the round is turned away (see TUNING.armour). */
+  ap: number;
+  /** Stagger force per hit. Robots build a stagger meter and stumble when it fills (TUNING.robot). */
+  stagger: number;
+  /** Spread added by each shot, the most it can add, and how fast it settles (deg, deg, deg/s). */
+  bloomPerShot: number;
+  bloomMax: number;
+  bloomRecovery: number;
+  /** Degrees of extra spread at full run speed: accuracy while moving. */
+  moveSpread: number;
+  /** Move speed multiplier while this weapon is equipped: heavier guns slow you. */
+  mobility: number;
+  // ---- feel -------------------------------------------------------------------------------
+  /** How big the weapon feels: muzzle flash, light, shockwave, smoke, casing, zoom punch (SMG is 0.7). */
+  heft: number;
+  /** How hard its hits land on enemies: hit particles, kill hit-stop and shake. */
+  impact: number;
+  /** What each rarity step above Common improves, on top of the damage and magazine tier scaling. */
+  step: WeaponStep;
+}
+
+/** Per rarity step. Fractions improve the stat by that share; counts are added and rounded down. */
+export interface WeaponStep {
+  rate?: number; // fire rate faster
+  spread?: number; // tighter
+  reload?: number; // faster
+  bloom?: number; // less spread per shot
+  recovery?: number; // settles faster
+  stagger?: number; // more stagger force
+  mobility?: number; // added to the multiplier
+  ap?: number; // added armour penetration
+  pellets?: number; // added pellets per shot
+  pierce?: number; // added pierce
+  burst?: number; // added rounds per burst
+  burstGap?: number; // faster burst
 }
 
 export interface BladeDef {
@@ -95,31 +132,49 @@ const SMG: WeaponDef = {
   fireDelay: 0.085, damage: 11, damageVariance: 0.15, pellets: 1, spread: 2.2,
   bulletSpeed: 1050, bulletLife: 0.9, bulletW: 28, bulletH: 2.6,
   mag: 30, reload: 1.15, reloadEmpty: 1.6, burstCount: 1, burstGap: 0, pierce: 0,
-  recoilImpulse: 38, cameraKick: 3.2, shotTrauma: 0.045, sound: 'smg',
+  recoilImpulse: 20, cameraKick: 1.5, shotTrauma: 0.022, sound: 'smg',
+  ap: 1, stagger: 0.04, bloomPerShot: 0.7, bloomMax: 5, bloomRecovery: 14, moveSpread: 1.2, mobility: 1,
+  heft: 0.7, impact: 0.5,
+  step: { rate: 0.05, spread: 0.05, reload: 0.04, ap: 0.15 },
 };
 
 export const BASE_ITEMS: readonly BaseItem[] = [
   // ----------------------------------------------------------------- primary
   { id: 'smg', slot: 'primary', family: 'smg', name: 'SMG', price: 0, weight: 30,
-    desc: 'Fast and light. The reliable workhorse.', weapon: SMG },
+    desc: 'Fast and light, with the lowest kick. Chews through scavengers; machines shrug it off.', weapon: SMG },
   { id: 'autopistol', slot: 'primary', family: 'pistol', name: 'Autopistol', price: 45, weight: 22,
-    desc: 'Light, quick to reload, hits harder per round than the SMG.',
+    desc: 'Light, accurate and quick to reload. Hits harder per round than the SMG and keeps you quick.',
     weapon: { ...SMG, shape: 'pistol', armsKey: 'clone_arms_pistol', muzzleOffset: 34.2, fireDelay: 0.14, damage: 15,
-      spread: 1.6, mag: 15, reload: 0.8, reloadEmpty: 1.1, recoilImpulse: 30, cameraKick: 2.6, shotTrauma: 0.04, sound: 'pistol' } },
+      spread: 1.6, mag: 15, reload: 0.8, reloadEmpty: 1.1, recoilImpulse: 36, cameraKick: 3.4, shotTrauma: 0.06, sound: 'pistol',
+      ap: 1, stagger: 0.06, bloomPerShot: 1.1, bloomMax: 4, bloomRecovery: 16, moveSpread: 0.6, mobility: 1.04,
+      heft: 1, impact: 0.8, step: { reload: 0.06, spread: 0.07, ap: 0.3, rate: 0.03 } } },
+  { id: 'magnum', slot: 'primary', family: 'magnum', name: 'Magnum', price: 130, weight: 12,
+    desc: 'Six heavy rounds. Punches through light plating and rocks machines back on their heels. Slow to bring back on target.',
+    weapon: { ...SMG, shape: 'magnum', armsKey: 'clone_arms_magnum', muzzleOffset: 37.6, muzzleSide: 11.5, fireDelay: 0.55, damage: 52,
+      damageVariance: 0.1, spread: 0.8, bulletSpeed: 1350, bulletLife: 0.9, bulletW: 36, bulletH: 3.4, mag: 6,
+      reload: 1.7, reloadEmpty: 2.3, recoilImpulse: 200, cameraKick: 12, shotTrauma: 0.3, sound: 'magnum',
+      ap: 3, stagger: 0.45, bloomPerShot: 3, bloomMax: 6, bloomRecovery: 7, moveSpread: 2, mobility: 0.96,
+      heft: 1.9, impact: 1.6, step: { ap: 0.35, stagger: 0.08, reload: 0.05, spread: 0.06 } } },
   { id: 'shotgun', slot: 'primary', family: 'shotgun', name: 'Scatter Gun', price: 90, weight: 16,
-    desc: 'Eight pellets, short range, slow to cycle. Devastating up close.',
+    desc: 'Eight pellets, short range, slow to cycle. Devastating up close, and the blast staggers machines.',
     weapon: { ...SMG, shape: 'shotgun', armsKey: 'clone_arms_shotgun', muzzleOffset: 39.8, fireDelay: 0.72, damage: 8,
       pellets: 8, spread: 7, bulletSpeed: 900, bulletLife: 0.38, bulletW: 16, bulletH: 2.4, mag: 6, reload: 1.9, reloadEmpty: 2.3,
-      recoilImpulse: 150, cameraKick: 8, shotTrauma: 0.16, sound: 'shotgun' } },
+      recoilImpulse: 230, cameraKick: 14, shotTrauma: 0.34, sound: 'shotgun',
+      ap: 2, stagger: 0.12, bloomPerShot: 2.5, bloomMax: 4, bloomRecovery: 9, moveSpread: 1.5, mobility: 0.94,
+      heft: 1.9, impact: 1.2, step: { pellets: 0.5, stagger: 0.08, ap: 0.3, reload: 0.05 } } },
   { id: 'marksman', slot: 'primary', family: 'marksman', name: 'Marksman Rifle', price: 140, weight: 12,
-    desc: 'Slow, precise, and the round passes through two enemies.',
+    desc: 'Slow, precise, armour-piercing. The round passes through two enemies. Do not run and gun with it.',
     weapon: { ...SMG, shape: 'marksman', armsKey: 'clone_arms_marksman', muzzleOffset: 39.9, fireDelay: 0.52, damage: 58,
       damageVariance: 0.1, spread: 0.3, bulletSpeed: 1600, bulletLife: 1.1, bulletW: 44, bulletH: 2.8, mag: 8,
-      reload: 1.7, reloadEmpty: 2.1, pierce: 2, recoilImpulse: 95, cameraKick: 6, shotTrauma: 0.1, sound: 'rifle' } },
+      reload: 1.7, reloadEmpty: 2.1, pierce: 2, recoilImpulse: 150, cameraKick: 10, shotTrauma: 0.22, sound: 'rifle',
+      ap: 4, stagger: 0.7, bloomPerShot: 2.2, bloomMax: 5, bloomRecovery: 6, moveSpread: 3, mobility: 0.92,
+      heft: 1.6, impact: 1.4, step: { ap: 0.4, pierce: 0.35, rate: 0.03, recovery: 0.06 } } },
   { id: 'burst', slot: 'primary', family: 'burst', name: 'Burst Carbine', price: 100, weight: 14,
-    desc: 'Three tight rounds per pull.',
+    desc: 'Three tight rounds per pull, with enough bite for light armour.',
     weapon: { ...SMG, shape: 'burst', armsKey: 'clone_arms_burst', muzzleOffset: 39.8, fireDelay: 0.4, damage: 14,
-      spread: 1.0, mag: 24, reload: 1.3, reloadEmpty: 1.7, burstCount: 3, burstGap: 0.055, recoilImpulse: 34, cameraKick: 3, sound: 'smg' } },
+      spread: 1.0, mag: 24, reload: 1.3, reloadEmpty: 1.7, burstCount: 3, burstGap: 0.055, recoilImpulse: 30, cameraKick: 2.8, shotTrauma: 0.05,
+      sound: 'smg', ap: 2, stagger: 0.08, bloomPerShot: 0.8, bloomMax: 4.5, bloomRecovery: 12, moveSpread: 1, mobility: 1,
+      heft: 1, impact: 0.8, step: { burst: 0.3, burstGap: 0.05, spread: 0.06, ap: 0.2 } } },
 
   // ------------------------------------------------------------------- blade
   { id: 'arc', slot: 'blade', family: 'arc', name: 'Arc Blade', price: 0, weight: 30,

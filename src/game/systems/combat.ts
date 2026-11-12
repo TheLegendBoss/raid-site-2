@@ -3,7 +3,8 @@ import { profile } from '../profile';
 import { PALETTE } from '../../data/palette';
 import { drawBar } from '../../fx/mobArt';
 import { runState } from '../runState';
-import type { Mob, Source } from '../types';
+import { armourFactor } from '../../sim/weapon';
+import type { Bullet, Mob, Source } from '../types';
 import type { Ctx } from '../ctx';
 
 /** Damage, kills and their effects. */
@@ -14,26 +15,56 @@ export class CombatSystem {
     return this.g.w;
   }
 
-  damageMob(m: Mob, dmg: number, ang: number, source: Source, hx: number, hy: number, cutAngle = ang): void {
+  private lastFxShot = -1;
+  private killImpact = 0.5;
+
+  damageMob(m: Mob, dmg: number, ang: number, source: Source, hx: number, hy: number, cutAngle = ang, bullet?: Bullet): void {
     if (m.dead) return;
     const J = T.juice;
+    const IM = T.impact;
     const isRobot = m.kind === 'robot';
     const heavy = source === 'sword';
+    const impact = bullet ? bullet.impact : 0.5;
+    // Armour: a round below the target's armour is mostly turned away (Helldivers 2 style).
+    let resisted = false;
+    if (bullet && !heavy) {
+      const f = armourFactor(bullet.ap, isRobot ? T.armour.robot : T.armour.scav, T.armour.table);
+      if (f < 1) {
+        dmg = Math.max(1, Math.round(dmg * f));
+        resisted = true;
+      }
+    }
     m.hp -= dmg;
     m.flash = 0.07;
     runState.hitMarker = 1;
-    this.g.nums.spawn(m.x, m.y - m.radius - 6, String(dmg), heavy ? 'blade' : 'gun');
+    this.g.nums.spawn(m.x, m.y - m.radius - 6, String(dmg), heavy ? 'blade' : resisted ? 'resist' : 'gun');
+    // Pellets share one trigger pull: feedback fires once per shot, not once per pellet.
+    const firstOfShot = !bullet || bullet.shot !== this.lastFxShot;
+    if (bullet) this.lastFxShot = bullet.shot;
+    this.killImpact = impact;
 
-    const kb = heavy ? profile.stats.blade.knockback * (isRobot ? 0.3 : 1) : isRobot ? T.robot.gunKnockback : T.scav.gunKnockback;
+    const kbScale = heavy ? 1 : 1 - IM.knock / 2 + IM.knock * impact;
+    const kb = (heavy ? profile.stats.blade.knockback * (isRobot ? 0.3 : 1) : isRobot ? T.robot.gunKnockback : T.scav.gunKnockback) * kbScale;
     m.vx += Math.cos(ang) * kb;
     m.vy += Math.sin(ang) * kb;
 
     if (isRobot) {
-      this.g.particles.burst(hx, hy, ang + Math.PI, 1.7, heavy ? 18 : 5, 160, 540, {
-        life: 0.3, w: 12, h: 1.8, color: PALETTE.spark, add: true, drag: 3, align: true,
-      });
-      this.g.glows.at(hx, hy, PALETTE.spark, heavy ? 1.8 : 0.9, 0.3, 0.09, 0.8);
-      this.g.sfx.hit('metal', heavy);
+      if (resisted) {
+        // Turned away: a fan of sparks thrown back off the plating, and a ping.
+        this.g.particles.burst(hx, hy, ang + Math.PI + (Math.random() - 0.5) * 0.8, 1.1, IM.resistSparks, 220, 620, {
+          life: 0.28, w: 14, h: 1.6, color: PALETTE.white, add: true, drag: 3, align: true,
+        });
+        this.g.glows.at(hx, hy, PALETTE.white, 0.8, 0.25, 0.07, 0.8);
+        if (firstOfShot) this.g.sfx.ricochet(impact);
+      } else {
+        const n = heavy ? 18 : Math.round(3 + impact * IM.sparks);
+        this.g.particles.burst(hx, hy, ang + Math.PI, 1.7, n, 160, 540 + impact * 120, {
+          life: 0.3, w: 12 + impact * 3, h: 1.8, color: PALETTE.spark, add: true, drag: 3, align: true,
+        });
+        this.g.glows.at(hx, hy, PALETTE.spark, heavy ? 1.8 : 0.6 + impact * 0.6, 0.3, 0.09, 0.8);
+        this.g.sfx.hit('metal', heavy);
+        if (!heavy && impact >= IM.heavyAt && firstOfShot) this.g.sfx.heavyHit(impact);
+      }
       drawBar(m);
     } else {
       this.g.particles.burst(hx, hy, ang, heavy ? 1.3 : 0.9, heavy ? 12 : 5, 90, 400, {
@@ -41,6 +72,23 @@ export class CombatSystem {
         decal: { color: 0x7a120f, alpha: 0.5, scale: 0.34 },
       });
       this.g.sfx.hit('flesh', heavy);
+    }
+
+    if (!heavy && impact >= IM.heavyAt && firstOfShot && !resisted) {
+      this.w.addHitStop(IM.hitStop * impact);
+      this.w.trauma = Math.min(1, this.w.trauma + IM.hitTrauma * impact);
+    }
+    if (!heavy && bullet && isRobot && !resisted && m.stagImmune <= 0) {
+      // Stagger builds across hits; when the meter fills the robot stumbles and its attack winds down.
+      m.stagMeter += bullet.stagger;
+      if (m.stagMeter >= T.robot.staggerAt) {
+        m.stagMeter = 0;
+        m.stagger = T.robot.staggerTime;
+        m.stagImmune = T.robot.staggerTime + T.robot.staggerImmune;
+        m.phase = 'move';
+        m.phaseTime = 0;
+        this.g.ring(m.x, m.y, PALETTE.spark, 0.22, 2.4);
+      }
     }
 
     if (heavy) {
@@ -103,8 +151,8 @@ export class CombatSystem {
         this.w.trauma = Math.min(1, this.w.trauma + J.swordKillTrauma);
         this.refundOnKill();
       } else {
-        this.w.addHitStop(J.hitStopGunKill);
-        this.w.trauma = Math.min(1, this.w.trauma + 0.07);
+        this.w.addHitStop(J.hitStopGunKill + T.impact.killStop * this.killImpact);
+        this.w.trauma = Math.min(1, this.w.trauma + 0.03 + T.impact.killTrauma * this.killImpact);
         this.g.sfx.kill(0.8);
       }
       if (this.g.rng.next() < T.scav.lootChance) this.g.lootSys.dropLoot(m.x, m.y, 0);

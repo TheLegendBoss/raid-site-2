@@ -7,7 +7,7 @@ const A = TUNING.art;
 
 export const CLONE_PARTS = [
   'clone_body', 'clone_head', 'clone_arms', 'clone_boot', 'clone_sword',
-  'clone_arms_pistol', 'clone_arms_shotgun', 'clone_arms_marksman', 'clone_arms_burst',
+  'clone_arms_pistol', 'clone_arms_shotgun', 'clone_arms_marksman', 'clone_arms_burst', 'clone_arms_magnum',
   'clone_cleaver', 'clone_stiletto',
 ] as const;
 

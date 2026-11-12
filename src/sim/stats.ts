@@ -6,6 +6,7 @@
 // rarity tier), then tree nodes add flat amounts and percentages on top.
 import { BASE_BY_ID, STARTING_KIT, type GunShape, type Slot, type WeaponDef } from '../data/items';
 import { RARITY_TIER } from '../data/loot';
+import { resolveWeapon } from './weapon';
 import { TREE_NODES, type StatKey } from '../data/tree';
 import { TUNING as T } from '../data/tuning';
 import type { Item } from './loot';
@@ -28,6 +29,15 @@ export interface WeaponStats {
   bulletH: number;
   burstCount: number;
   burstGap: number;
+  ap: number;
+  stagger: number;
+  bloomPerShot: number;
+  bloomMax: number;
+  bloomRecovery: number;
+  moveSpread: number;
+  mobility: number;
+  heft: number;
+  impact: number;
   pierce: number;
   recoilImpulse: number;
   cameraKick: number;
@@ -75,10 +85,10 @@ export interface EffectiveStats {
 /** Never let a percentage stack take a stat below this fraction of its base. */
 const FLOOR = 0.25;
 
-function baseFor(loadout: Loadout, slot: Slot): { def: ReturnType<typeof BASE_BY_ID.get>; tier: number } {
+function baseFor(loadout: Loadout, slot: Slot): { def: ReturnType<typeof BASE_BY_ID.get>; tier: number; rarity: number } {
   const it = loadout[slot];
   const def = BASE_BY_ID.get(it ? it.baseId : STARTING_KIT[slot])!;
-  return { def, tier: it ? RARITY_TIER[it.rarity] : 1 };
+  return { def, tier: it ? RARITY_TIER[it.rarity] : 1, rarity: it ? it.rarity : 0 };
 }
 
 export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): EffectiveStats {
@@ -86,7 +96,7 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
   const bld = baseFor(loadout, 'blade');
   const arm = baseFor(loadout, 'armour');
   const pck = baseFor(loadout, 'pack');
-  const wp = pri.def!.weapon!;
+  const wp = resolveWeapon(pri.def!.weapon!, pri.rarity); // damage and magazine are already tier-scaled
   const bl = bld.def!.blade!;
   const ar = arm.def!.armour!;
   const pk = pck.def!.pack!;
@@ -96,12 +106,12 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
     shield: ar.shield * arm.tier,
     shieldRegenRate: T.player.shieldRegenRate,
     shieldRegenDelay: T.player.shieldRegenDelay,
-    moveSpeed: T.player.maxSpeed * ar.moveMul,
+    moveSpeed: T.player.maxSpeed * ar.moveMul * wp.mobility,
     dashCooldown: T.player.dashCooldown * ar.dashCdMul * pk.dashCdMul,
-    gunDamage: wp.damage * pri.tier,
+    gunDamage: wp.damage,
     spread: wp.spread,
     reloadTime: wp.reload,
-    magSize: wp.mag * pri.tier,
+    magSize: wp.mag,
     reserveMax: pk.reserve * pck.tier,
     bladeDamage: bl.damage * bld.tier,
     bladeCooldown: bl.cooldown * pk.bladeCdMul,
@@ -150,6 +160,8 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
       name: pri.def!.name, shape: wp.shape, armsKey: wp.armsKey, muzzleOffset: wp.muzzleOffset, muzzleSide: wp.muzzleSide,
       fireDelay: wp.fireDelay, damageVariance: wp.damageVariance, pellets: wp.pellets, bulletSpeed: wp.bulletSpeed,
       bulletLife: wp.bulletLife, bulletW: wp.bulletW, bulletH: wp.bulletH, burstCount: wp.burstCount, burstGap: wp.burstGap,
+      ap: wp.ap, stagger: wp.stagger, bloomPerShot: wp.bloomPerShot, bloomMax: wp.bloomMax, bloomRecovery: wp.bloomRecovery,
+      moveSpread: wp.moveSpread, mobility: wp.mobility, heft: wp.heft, impact: wp.impact,
       pierce: wp.pierce, recoilImpulse: wp.recoilImpulse, cameraKick: wp.cameraKick, shotTrauma: wp.shotTrauma, sound: wp.sound,
     },
     blade: {

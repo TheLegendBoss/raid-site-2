@@ -12,6 +12,8 @@ import type { Ctx } from '../ctx';
 export class GunSystem {
   constructor(private readonly g: Ctx) {}
 
+  private shotId = 0;
+
   private get w(): Ctx['w'] {
     return this.g.w;
   }
@@ -22,7 +24,7 @@ export class GunSystem {
     const ptr = this.g.scene.input.activePointer;
     const s = runState;
     this.w.fireCd -= dt;
-    this.w.bloom = Math.max(0, this.w.bloom - 14 * dt);
+    this.w.bloom = Math.max(0, this.w.bloom - wp.bloomRecovery * dt);
     s.reserve = Math.min(s.maxReserve, s.reserve + G.reserveRegenPerSec * dt);
 
     if (Phaser.Input.Keyboard.JustDown(this.g.keys.R)) {
@@ -76,7 +78,10 @@ export class GunSystem {
     const s = runState;
     s.mag -= 1;
     s.shotSeq += 1;
-    const cone = (profile.stats.spread + this.w.bloom) * DEG;
+    // Accuracy: base spread, plus bloom from recent shots, plus extra while running (Intravenous 2 style).
+    const speedFrac = clamp(Math.hypot(this.w.pvx, this.w.pvy) / T.player.maxSpeed, 0, 1);
+    const cone = (profile.stats.spread + this.w.bloom + wp.moveSpread * speedFrac) * DEG;
+    this.shotId += 1;
     // The weapon is held straight out on the clone's right, so it fires from the muzzle and converges on the cursor.
     const ca = Math.cos(this.w.aim);
     const sa = Math.sin(this.w.aim);
@@ -88,9 +93,10 @@ export class GunSystem {
     for (let i = 0; i < wp.pellets; i++) {
       const a = toCursor + (Math.random() - 0.5) * 2 * cone;
       const dmg = Math.round(rollDamage(this.g.rng, profile.stats.gunDamage, wp.damageVariance) * (this.w.hotMag ? 1 + T.gun.activeReload.bonusDamage : 1));
-      this.fireBullet(mx, my, a, wp.bulletSpeed, dmg, true, wp.bulletLife, 0xe9fff6, wp.bulletW, wp.bulletH, wp.pierce);
+      this.fireBullet(mx, my, a, wp.bulletSpeed, dmg, true, wp.bulletLife, 0xe9fff6, wp.bulletW, wp.bulletH, wp.pierce,
+        { ap: wp.ap, stagger: wp.stagger / Math.sqrt(wp.pellets), impact: wp.impact, shot: this.shotId });
     }
-    this.w.bloom = Math.min(5.5, this.w.bloom + 0.9);
+    this.w.bloom = Math.min(wp.bloomMax, this.w.bloom + wp.bloomPerShot);
     if (s.mag < 1) {
       this.w.hotMag = false;
       s.hotMag = false;
@@ -98,7 +104,7 @@ export class GunSystem {
     if (s.mag < 1 && s.reserve >= 1) this.startReload();
 
     // Juice: flash, light, casing, recoil, kick, noise. Heavier weapons flash and kick bigger.
-    const heft = clamp(0.8 + wp.recoilImpulse / 150, 0.8, 1.8);
+    const heft = wp.heft;
     this.g.particles.emit({
       x: mx, y: my, vx: 0, vy: 0, life: 0.045, w: 40 * heft, h: 6 * heft, rot: toCursor,
       color: PALETTE.muzzle, add: true,
@@ -118,6 +124,14 @@ export class GunSystem {
     this.w.trauma = Math.min(1, this.w.trauma + wp.shotTrauma);
     this.g.rig.kick();
     this.g.sfx.shoot(wp.sound);
+    // Heavy guns punch the view: a camera zoom thump and a brief screen-space shockwave at the muzzle.
+    if (heft > 1.2) {
+      this.w.zoomPunch = Math.min(0.06, this.w.zoomPunch + (heft - 1.2) * T.juice.heavyShotZoom);
+      this.g.ring(mx, my, PALETTE.muzzle, T.juice.heavyShotRing * heft, 3 + heft * 2);
+      this.g.particles.burst(mx, my, toCursor, 0.5, Math.round(3 + heft * 3), 140, 520, {
+        life: 0.22, w: 10 * heft, h: 1.8, color: PALETTE.muzzle, add: true, drag: 3, align: true,
+      });
+    }
   }
 
   startReload(): void {
@@ -216,6 +230,7 @@ export class GunSystem {
   fireBullet(
     x: number, y: number, angle: number, speed: number, dmg: number,
     friendly: boolean, life: number, color: number, w: number, h: number, pierce = 0,
+    extra: { ap: number; stagger: number; impact: number; shot: number } = { ap: 0, stagger: 0, impact: 0, shot: 0 },
   ): void {
     const b = this.w.bullets.find((o) => !o.active);
     if (!b) return;
@@ -228,6 +243,10 @@ export class GunSystem {
     b.life = life;
     b.dmg = dmg;
     b.pierce = pierce;
+    b.ap = extra.ap;
+    b.stagger = extra.stagger;
+    b.impact = extra.impact;
+    b.shot = extra.shot;
     b.hit.clear();
     b.img.setVisible(true).setTint(color).setPosition(x, y).setRotation(angle).setScale(w / 4, h / 4);
   }
@@ -255,7 +274,7 @@ export class GunSystem {
         for (const m of this.w.mobs) {
           if (m.dead || b.hit.has(m)) continue;
           if (segmentHitsCircle(b.x, b.y, nx, ny, m.x, m.y, m.radius + 3)) {
-            this.g.combat.damageMob(m, b.dmg, ang, 'gun', nx, ny);
+            this.g.combat.damageMob(m, b.dmg, ang, 'gun', nx, ny, ang, b);
             b.hit.add(m);
             if (b.pierce > 0) b.pierce -= 1;
             else spent = true;

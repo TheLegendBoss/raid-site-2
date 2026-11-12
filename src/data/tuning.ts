@@ -111,6 +111,20 @@ export const TUNING = {
     swordZoomPunch: 0.022,
     robotDeathZoomPunch: 0.035,
     comboWindow: 1.6,
+    heavyShotZoom: 0.03, // zoom thump per point of weapon heft above 1.2
+    heavyShotRing: 0.12, // seconds the muzzle shockwave ring lives, times heft
+  },
+
+  // How gun hits land on enemies, scaled by the weapon's impact stat (SMG 0.5, magnum 1.6).
+  impact: {
+    sparks: 4, // extra spark particles per point of impact (robots)
+    knock: 0.7, // knockback = base * (1 - knock/2 + knock * impact)
+    heavyAt: 1.0, // impact at or above this gets hit-stop, shake and the heavy hit sound
+    hitStop: 0.03, // per point of impact, once per trigger pull
+    hitTrauma: 0.045,
+    killStop: 0.03, // extra kill hit-stop per point of impact
+    killTrauma: 0.05,
+    resistSparks: 7, // sparks thrown when armour turns a round away
   },
 
   scav: {
@@ -127,9 +141,22 @@ export const TUNING = {
     lootChance: 0.34,
   },
 
+  // Armour penetration against armour (Helldivers 2 style). Rows are AP minus the target's armour,
+  // clamped to the table; values are the share of the damage that gets through.
+  armour: {
+    scav: 0,
+    robot: 2,
+    // diff <= -2, -1, 0, >= +1
+    table: [0.35, 0.55, 0.8, 1],
+  },
+
   robot: {
     radius: 21,
     hp: 120,
+    staggerAt: 1, // stagger meter that triggers a stumble
+    staggerDecay: 1.4, // meter drained per second
+    staggerTime: 0.55, // seconds a gun-staggered robot stumbles
+    staggerImmune: 1.2, // seconds before it can be gun-staggered again
     speed: 78,
     preferredMin: 230,
     preferredMax: 340,
@@ -172,7 +199,8 @@ export const TUNING = {
     hurtSize: 21,
     shieldSize: 21,
     refundSize: 16,
-    pool: { gun: 36, blade: 16, hurt: 8, shield: 8, refund: 8 },
+    resistSize: 12,
+    pool: { gun: 36, blade: 16, hurt: 8, shield: 8, refund: 8, resist: 24 },
   },
 
   extract: {

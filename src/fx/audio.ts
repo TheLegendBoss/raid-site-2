@@ -168,26 +168,62 @@ export class Sfx {
 
   // ---- Player weapons -------------------------------------------------
 
-  shoot(kind: 'smg' | 'pistol' | 'shotgun' | 'rifle' = 'smg'): void {
+  /** The gun's report. Light guns are a thin crack; heavy ones add a sub thump, a body and a long tail. */
+  shoot(kind: 'smg' | 'pistol' | 'magnum' | 'shotgun' | 'rifle' = 'smg'): void {
     if (!this.gate('shoot', 30)) return;
     const p = this.rp();
     if (kind === 'pistol') {
-      this.burst({ filter: 'highpass', f0: 3800 * p, f1: 1200, dur: 0.05, gain: 0.5, wet: 0.1 });
-      this.tone({ type: 'sawtooth', f0: 250 * p, f1: 70, dur: 0.09, gain: 0.45, wet: 0.2 });
-      this.burst({ filter: 'lowpass', f0: 1300 * p, f1: 220, dur: 0.2, gain: 0.18, wet: 0.6 });
+      this.burst({ filter: 'highpass', f0: 3600 * p, f1: 1200, dur: 0.05, gain: 0.55, wet: 0.1 });
+      this.tone({ type: 'sawtooth', f0: 230 * p, f1: 70, dur: 0.1, gain: 0.5, wet: 0.2 });
+      this.tone({ type: 'sine', f0: 120 * p, f1: 46, dur: 0.11, gain: 0.45, wet: 0.15 });
+      this.burst({ filter: 'lowpass', f0: 1300 * p, f1: 220, dur: 0.22, gain: 0.2, wet: 0.6 });
+    } else if (kind === 'magnum') {
+      // A hand cannon: a hard crack, a chest-thumping sub, and a slap-back off the walls.
+      this.burst({ filter: 'highpass', f0: 3000 * p, f1: 700, dur: 0.09, gain: 0.95, wet: 0.25, attack: 0.001 });
+      this.tone({ type: 'sawtooth', f0: 150 * p, f1: 38, dur: 0.24, gain: 0.85, wet: 0.3 });
+      this.tone({ type: 'sine', f0: 80 * p, f1: 26, dur: 0.38, gain: 1.15, wet: 0.2 });
+      this.burst({ filter: 'lowpass', f0: 1700 * p, f1: 90, dur: 0.6, gain: 0.55, wet: 0.85 });
+      window.setTimeout(() => {
+        this.burst({ filter: 'bandpass', f0: 900, q: 0.6, dur: 0.3, gain: 0.22, wet: 0.9 });
+      }, 70);
     } else if (kind === 'shotgun') {
-      this.burst({ filter: 'highpass', f0: 2600 * p, f1: 600, dur: 0.08, gain: 0.6, wet: 0.2 });
-      this.tone({ type: 'sawtooth', f0: 120 * p, f1: 32, dur: 0.22, gain: 0.65, wet: 0.3 });
-      this.burst({ filter: 'lowpass', f0: 1500 * p, f1: 110, dur: 0.42, gain: 0.45, wet: 0.7 });
+      // A twelve-gauge blast: a wide crack, a deep boom, a long rolling tail, then the pump.
+      this.burst({ filter: 'highpass', f0: 2200 * p, f1: 450, dur: 0.12, gain: 1.0, wet: 0.25, attack: 0.001 });
+      this.tone({ type: 'sawtooth', f0: 110 * p, f1: 28, dur: 0.3, gain: 0.9, wet: 0.3 });
+      this.tone({ type: 'sine', f0: 70 * p, f1: 24, dur: 0.45, gain: 1.2, wet: 0.2 });
+      this.burst({ filter: 'lowpass', f0: 1800 * p, f1: 80, dur: 0.75, gain: 0.7, wet: 0.9 });
+      window.setTimeout(() => {
+        this.burst({ filter: 'highpass', f0: 2600, dur: 0.04, gain: 0.35, wet: 0.1 });
+        this.tone({ type: 'square', f0: 180, f1: 80, dur: 0.08, gain: 0.2, wet: 0.2 });
+      }, 230);
     } else if (kind === 'rifle') {
-      this.burst({ filter: 'highpass', f0: 4200 * p, f1: 1200, dur: 0.06, gain: 0.62, wet: 0.15 });
-      this.tone({ type: 'sawtooth', f0: 150 * p, f1: 40, dur: 0.16, gain: 0.58, wet: 0.3 });
-      this.burst({ filter: 'lowpass', f0: 900 * p, f1: 90, dur: 0.5, gain: 0.3, wet: 0.85 });
+      // A supersonic crack with a long bass roll behind it.
+      this.burst({ filter: 'highpass', f0: 4800 * p, f1: 1400, dur: 0.07, gain: 0.9, wet: 0.2, attack: 0.001 });
+      this.tone({ type: 'sawtooth', f0: 140 * p, f1: 36, dur: 0.2, gain: 0.75, wet: 0.3 });
+      this.tone({ type: 'sine', f0: 72 * p, f1: 28, dur: 0.3, gain: 0.95, wet: 0.2 });
+      this.burst({ filter: 'lowpass', f0: 900 * p, f1: 80, dur: 0.7, gain: 0.45, wet: 0.9 });
     } else {
-      this.burst({ filter: 'highpass', f0: 3200 * p, f1: 900, dur: 0.05, gain: 0.5, wet: 0.1 });
-      this.tone({ type: 'sawtooth', f0: 190 * p, f1: 52, dur: 0.1, gain: 0.5, wet: 0.2 });
-      this.burst({ filter: 'lowpass', f0: 1100 * p, f1: 180, dur: 0.26, gain: 0.2, wet: 0.7 });
+      // The SMG is the light one: a short, thin, bright tick with almost no body.
+      this.burst({ filter: 'highpass', f0: 3600 * p, f1: 1100, dur: 0.04, gain: 0.34, wet: 0.08 });
+      this.tone({ type: 'sawtooth', f0: 220 * p, f1: 70, dur: 0.06, gain: 0.3, wet: 0.15 });
+      this.burst({ filter: 'lowpass', f0: 1100 * p, f1: 200, dur: 0.16, gain: 0.1, wet: 0.5 });
     }
+  }
+
+  /** A bullet turned away by armour: a ringing ping and a spark of noise. Heavier rounds ring lower. */
+  ricochet(power = 1): void {
+    if (!this.gate('ricochet', 45)) return;
+    const f = (2400 + Math.random() * 900) / (0.8 + power * 0.2);
+    this.tone({ type: 'triangle', f0: f, f1: f * 0.55, dur: 0.14, gain: 0.16, wet: 0.35 });
+    this.burst({ filter: 'highpass', f0: 5200, dur: 0.03, gain: 0.18, wet: 0.1 });
+  }
+
+  /** A heavy hit landing on a machine: a dull clang with weight. Scaled by the weapon's impact. */
+  heavyHit(power = 1): void {
+    if (!this.gate('heavyhit', 60)) return;
+    const p = this.rp();
+    this.tone({ type: 'sine', f0: 140 * p, f1: 50, dur: 0.14, gain: 0.3 * power, wet: 0.2 });
+    this.burst({ filter: 'bandpass', f0: 1500 * p, q: 1.2, dur: 0.08, gain: 0.2 * power, wet: 0.2 });
   }
 
   empty(): void {

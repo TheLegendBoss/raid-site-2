@@ -82,7 +82,7 @@ export class MobSystem {
       kind, gfx, x, y, vx: 0, vy: 0, hp: cfg.hp, maxHp: cfg.hp, radius: cfg.radius,
       speed: cfg.speed * (robot ? 1 : 1 + (Math.random() * 2 - 1) * T.scav.speedJitter),
       facing: Math.atan2(this.w.py - y, this.w.px - x), attackCd: 0.3, flash: 0, flashing: false,
-      stagger: 0, wobble: Math.random() * 6, dead: false,
+      stagger: 0, stagMeter: 0, stagImmune: 0, wobble: Math.random() * 6, dead: false,
       phase: 'move', phaseTime: 0, shotsLeft: 0, shotTimer: 0,
       shotCd: robot ? Phaser.Math.FloatBetween(0.8, 1.6) : 0, aimAngle: 0,
       strafe: Math.random() < 0.5 ? 1 : -1,
@@ -125,6 +125,8 @@ export class MobSystem {
         drawMob(m, false);
       }
       if (m.stagger > 0) m.stagger -= dt;
+      if (m.stagMeter > 0) m.stagMeter = Math.max(0, m.stagMeter - T.robot.staggerDecay * dt);
+      if (m.stagImmune > 0) m.stagImmune -= dt;
 
       const dx = this.w.px - m.x;
       const dy = this.w.py - m.y;

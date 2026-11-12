@@ -723,19 +723,24 @@ export class Base extends Phaser.Scene {
     let ly = y + 68 + d.height + 18;
     this.text(x + 16, ly, 'STATS  vs equipped', 11, PALETTE.textDim);
     ly += 20;
-    for (const l of statLines(base, rarity)) {
-      this.text(x + 16, ly, l.label, 13, PALETTE.text);
-      this.text(x + w - 130, ly, l.text, 13, PALETTE.white, [1, 0]);
+    const lines = statLines(base, rarity);
+    // Weapons carry a lot of stats: squeeze the row spacing to fit above the buttons.
+    const bottom = y + h - 16 - 3 * 42 - 22;
+    const lh = Math.max(15, Math.min(22, (bottom - ly) / lines.length));
+    const fs = lh < 18 ? 12 : 13;
+    for (const l of lines) {
+      this.text(x + 16, ly, l.label, fs, PALETTE.text);
+      this.text(x + w - 130, ly, l.text, fs, PALETTE.white, [1, 0]);
       const m = mine.get(l.key);
       if (m && row.item !== eq) {
         const diff = l.value - m.value;
         if (Math.abs(diff) > 1e-6) {
           const better = l.higherBetter ? diff > 0 : diff < 0;
           const pct = m.value !== 0 ? Math.round((diff / Math.abs(m.value)) * 100) : 0;
-          this.text(x + w - 16, ly, `${diff > 0 ? '+' : ''}${pct}%`, 13, better ? PALETTE.player : PALETTE.hostile, [1, 0]);
+          this.text(x + w - 16, ly, `${diff > 0 ? '+' : ''}${pct}%`, fs, better ? PALETTE.player : PALETTE.hostile, [1, 0]);
         }
       }
-      ly += 22;
+      ly += lh;
     }
 
     // Action buttons along the bottom.

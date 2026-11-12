@@ -27,6 +27,8 @@ export interface Mob {
   flash: number;
   flashing: boolean;
   stagger: number;
+  stagMeter: number; // gun stagger build-up (robots)
+  stagImmune: number;
   wobble: number;
   dead: boolean;
   // robots
@@ -51,6 +53,10 @@ export interface Bullet {
   dmg: number;
   pierce: number; // extra enemies the round can pass through
   hit: Set<Mob>; // enemies already hit by this round
+  ap: number; // armour penetration
+  stagger: number; // stagger force
+  impact: number; // hit feedback scale
+  shot: number; // which trigger pull fired it (one hit-stop per shot, not per pellet)
 }
 
 export interface Drop {
@@ -93,7 +99,7 @@ export interface SwordState {
   hit: Set<Mob>;
 }
 
-export type NumClass = 'gun' | 'blade' | 'hurt' | 'shield' | 'refund';
+export type NumClass = 'gun' | 'blade' | 'hurt' | 'shield' | 'refund' | 'resist';
 
 export interface DmgNum {
   txt: Phaser.GameObjects.Text;

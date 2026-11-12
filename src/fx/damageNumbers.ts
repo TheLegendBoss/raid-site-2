@@ -18,6 +18,7 @@ export class DamageNumbers {
       blade: { size: N.bladeSize, color: PALETTE.white },
       hurt: { size: N.hurtSize, color: PALETTE.hostile },
       shield: { size: N.shieldSize, color: PALETTE.shield },
+      resist: { size: N.resistSize, color: PALETTE.textDim },
       refund: { size: N.refundSize, color: PALETTE.ammo },
     };
     for (const cls of Object.keys(spec) as NumClass[]) {

@@ -105,7 +105,7 @@ export class FeelTest extends Phaser.Scene {
     for (let i = 0; i < BULLET_POOL; i++) {
       this.w.bullets.push({
         img: this.add.image(0, 0, 'px').setDepth(17).setBlendMode(Phaser.BlendModes.ADD).setVisible(false),
-        active: false, friendly: true, x: 0, y: 0, vx: 0, vy: 0, life: 0, dmg: 0, pierce: 0, hit: new Set(),
+        active: false, friendly: true, x: 0, y: 0, vx: 0, vy: 0, life: 0, dmg: 0, pierce: 0, hit: new Set(), ap: 0, stagger: 0, impact: 0, shot: 0,
       });
     }
 
