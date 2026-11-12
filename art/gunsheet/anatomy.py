@@ -1,6 +1,7 @@
 """Shared firearm anatomy (side view, millimetres). Bore axis is y=0, +x is toward the muzzle, y grows downward.
 Every gun is built from the same helpers so grips, guards, triggers, ports and ammo obey the same rules."""
 import math
+_VS=[1.0]   # vertical stretch applied to the gun group; ammo cancels it so rounds keep their true shape
 OUT='#9fe8d2'; FILL='#0a1112'; DIM='#4f7c74'; AMB='#ffb347'; BR='#d8b04a'; CU='#c9703a'; RED='#c0463a'; TXT='#7fa8a0'
 
 def path(d,fill=FILL,stroke=OUT,sw=1.3,dash=None):
@@ -30,13 +31,13 @@ def cartridge(kind,x0,yc,rot=0,hot=False,spent=False):
     bul=f'M{Lc-1:.2f} {-b:.2f} L{oal-og:.2f} {-b:.2f} Q{oal-og*.35:.2f} {-b*.92:.2f} {oal:.2f} {-b*.28:.2f} L{oal:.2f} {b*.28:.2f} Q{oal-og*.35:.2f} {b*.92:.2f} {oal-og:.2f} {b:.2f} L{Lc-1:.2f} {b:.2f} Z'
     if spent:  # empty case: open mouth, no bullet
         mouth=f'<ellipse cx="{Lc:.2f}" cy="0" rx="1.1" ry="{n:.2f}" fill="#000" stroke="{BR}" stroke-width="1"/>'
-        return (f'<g transform="translate({x0:.2f} {yc:.2f}) rotate({rot:.2f})">'+path(case_d,stroke=BR,sw=1)+mouth+'</g>')
-    return (f'<g transform="translate({x0:.2f} {yc:.2f}) rotate({rot:.2f})">'+path(bul,stroke=CU,sw=1)+path(case_d,stroke=('#fff2c2' if hot else BR),sw=1)+'</g>')
+        return (f'<g transform="translate({x0:.2f} {yc:.2f}) scale(1 {1/_VS[0]:.4f}) rotate({rot:.2f})">'+path(case_d,stroke=BR,sw=1)+mouth+'</g>')
+    return (f'<g transform="translate({x0:.2f} {yc:.2f}) scale(1 {1/_VS[0]:.4f}) rotate({rot:.2f})">'+path(bul,stroke=CU,sw=1)+path(case_d,stroke=('#fff2c2' if hot else BR),sw=1)+'</g>')
 def shell12(x0,yc,rot=0):
     top=[(0,-11.4),(1.8,-11.4),(1.8,-10.7),(17,-10.7)]
     head='M'+' L'.join(f'{x:.2f} {y:.2f}' for x,y in top+[(x,-y) for x,y in reversed(top)])+' Z'
     hull=f'M17 -10.2 L66 -10.2 Q70 -8.8 70 -5 L70 5 Q70 8.8 66 10.2 L17 10.2 Z'
-    return (f'<g transform="translate({x0:.2f} {yc:.2f}) rotate({rot:.2f})">'+path(hull,stroke=RED,sw=1)+path(head,stroke=BR,sw=1)+'</g>')
+    return (f'<g transform="translate({x0:.2f} {yc:.2f}) scale(1 {1/_VS[0]:.4f}) rotate({rot:.2f})">'+path(hull,stroke=RED,sw=1)+path(head,stroke=BR,sw=1)+'</g>')
 def rd(kind): return CAL[kind]['d']
 def oal(kind): return 70 if kind=='12ga' else CAL[kind]['oal']
 
@@ -63,17 +64,18 @@ class Grip:
         y0=s.ay+top; y1=s.ay+s.L*s.dy-bottom
         return (s.back_x(y0)+inset,y0),(s.front_x(y0)-inset,y0),(s.front_x(y1)-inset,y1),(s.back_x(y1)+inset,y1)
 
-def guard_and_trigger(g,frame_y,trig_gap=25,front_gap=34,depth=34,t=5):
-    """Trigger blade 25 mm ahead of the front strap, guard anchored to the frame and the strap with finger room."""
-    ty=frame_y+13
-    tx=g.front_x(ty)+trig_gap
-    gf=tx+front_gap; gb=frame_y+depth
+def guard_and_trigger(g,frame_y,trig_gap=9,guard_len=40,depth=28,t=4.5,tlen=24):
+    """Trigger shoe: straight rear face about 9 mm ahead of the front strap, notched front edge, flared top and bottom,
+    sitting inside a short guard anchored to the frame and the strap."""
+    tr=g.front_x(frame_y+12)+trig_gap          # rear face of the trigger
+    gf=tr+guard_len; gb=frame_y+depth
     sx=g.front_x(gb); six=g.front_x(gb-t)
     outer=f'M{gf:.1f} {frame_y} L{gf:.1f} {gb-12} Q{gf:.1f} {gb} {gf-12:.1f} {gb} L{sx+10:.1f} {gb} Q{sx+2:.1f} {gb} {sx:.1f} {gb-4}'
     inner=f' L{six:.1f} {gb-t} L{six+10:.1f} {gb-t} L{gf-t-10:.1f} {gb-t} Q{gf-t:.1f} {gb-t} {gf-t:.1f} {gb-t-10} L{gf-t:.1f} {frame_y} Z'
     guard=path(outer+inner)
-    trig=poly([(tx,frame_y),(tx+7,frame_y),(tx+5,frame_y+11),(tx-1,frame_y+25),(tx-7,frame_y+23),(tx-2,frame_y+10)])
-    return guard+trig,(tx,gf,gb)
+    w=15; mid=tr+9
+    trig=path(f'M{tr:.1f} {frame_y+tlen:.1f} L{tr:.1f} {frame_y} L{tr+w:.1f} {frame_y+.7:.1f} Q{mid:.1f} {frame_y+tlen/2:.1f} {tr+w:.1f} {frame_y+tlen:.1f} Z')
+    return guard+trig,(tr,gf,gb)
 
 def port(x,y,length,height):
     return path(f'M{x} {y} h{length} v{height} h{-length} Z',fill='none',stroke=AMB,sw=1)
