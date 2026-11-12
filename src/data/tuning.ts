@@ -30,6 +30,16 @@ export const TUNING = {
     swingMoveFactor: 0.35, // movement control while the blade is out
   },
 
+  art: {
+    scale: 0.25, // sprites are exported at 4x; draw them at game pixels
+    stridePerPx: 0.11, // boot phase advanced per px travelled
+    strideAmp: 8,
+    bootY: 8,
+    recoil: 3.4, // px the carbine and helmet snap back per shot
+    recoilRecover: 34,
+    dashStretch: 1.12,
+  },
+
   gun: {
     name: 'Carbine',
     fireDelay: 0.085,
@@ -48,7 +58,7 @@ export const TUNING = {
     recoilImpulse: 38,
     cameraKick: 3.2, // px opposite the aim per shot
     shotTrauma: 0.045,
-    muzzleOffset: 28,
+    muzzleOffset: 31, // matches the carbine tip in art/clone.vx.js
   },
 
   sword: {

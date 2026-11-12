@@ -1,6 +1,6 @@
 # RAID SITE 2
 
-A cloned super soldier pushes into a network of sealed, derelict sites. Looter shooter, real-time, top-down, keyboard and mouse. Vector line art on near-black, no sprites.
+A cloned super soldier pushes into a network of sealed, derelict sites. Looter shooter, real-time, top-down, keyboard and mouse. Vector art on near-black.
 
 This repo starts as a **feel test**: one arena, one carbine, one power blade, scavenger swarms and rogue robots. The only question it answers is whether being the soldier feels heavy and good for ten minutes. Design docs come after the answer is yes.
 

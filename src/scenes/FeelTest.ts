@@ -6,6 +6,7 @@ import { FONT, PALETTE, RARITY_COLORS, hex } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { Sfx } from '../fx/audio';
 import { Particles } from '../fx/particles';
+import { PlayerRig } from '../fx/playerRig';
 import { pushFeed, resetVitals, runState, setBanner } from '../game/runState';
 import { rollDamage } from '../sim/damage';
 import { rollItem, type Item } from '../sim/loot';
@@ -160,7 +161,7 @@ export class FeelTest extends Phaser.Scene {
   private keys!: KeyMap;
   private floor!: Phaser.GameObjects.RenderTexture;
   private particles!: Particles;
-  private playerGfx!: Phaser.GameObjects.Graphics;
+  private rig!: PlayerRig;
   private shieldGfx!: Phaser.GameObjects.Graphics;
   private bladeGfx!: Phaser.GameObjects.Graphics;
   private bladeGlow!: Phaser.GameObjects.Image;
@@ -244,8 +245,7 @@ export class FeelTest extends Phaser.Scene {
 
     this.fxGfx = this.add.graphics().setDepth(16);
 
-    this.playerGfx = this.add.graphics().setDepth(14);
-    this.drawPlayer(false);
+    this.rig = new PlayerRig(this, 14);
     this.shieldGfx = this.add.graphics().setDepth(13);
     this.shieldGfx.lineStyle(2, PALETTE.shield, 1);
     this.shieldGfx.strokeCircle(0, 0, T.player.radius + 8);
@@ -336,28 +336,6 @@ export class FeelTest extends Phaser.Scene {
       g.lineBetween(r.x, r.y, r.x + r.w, r.y + r.h);
       g.lineBetween(r.x + r.w, r.y, r.x, r.y + r.h);
     }
-  }
-
-  private drawPlayer(white: boolean): void {
-    const g = this.playerGfx;
-    const c = white ? PALETTE.white : PALETTE.player;
-    g.clear();
-    g.fillStyle(c, white ? 0.9 : 0.2);
-    g.lineStyle(2.6, c, 1);
-    g.fillCircle(0, 0, 13);
-    g.strokeCircle(0, 0, 13);
-    // pauldrons
-    g.fillStyle(c, white ? 0.9 : 0.45);
-    g.fillRect(-9, -19, 14, 7);
-    g.fillRect(-9, 12, 14, 7);
-    g.lineStyle(1.5, c, 1);
-    g.strokeRect(-9, -19, 14, 7);
-    g.strokeRect(-9, 12, 14, 7);
-    // carbine
-    g.lineStyle(4, c, 1);
-    g.lineBetween(6, 6, 27, 6);
-    g.lineStyle(2, c, 1);
-    g.lineBetween(10, 0, 22, 0);
   }
 
   private drawMob(m: Mob, white: boolean): void {
@@ -598,14 +576,16 @@ export class FeelTest extends Phaser.Scene {
       this.playerFlash -= dt;
       if (!this.playerFlashing) {
         this.playerFlashing = true;
-        this.drawPlayer(true);
+        this.rig.setFlash(true);
       }
     } else if (this.playerFlashing) {
       this.playerFlashing = false;
-      this.drawPlayer(false);
+      this.rig.setFlash(false);
     }
 
-    this.playerGfx.setPosition(this.px, this.py).setRotation(this.aim);
+    this.rig.setDashing(this.dashT > 0);
+    this.rig.update(dt, Math.hypot(this.px - ox, this.py - oy), Math.hypot(this.pvx, this.pvy) / P.maxSpeed);
+    this.rig.setPose(this.px, this.py, this.aim);
     this.shieldGfx
       .setPosition(this.px, this.py)
       .setAlpha(0.12 + 0.4 * (runState.shield / runState.maxShield) + this.playerFlash * 3);
@@ -654,7 +634,7 @@ export class FeelTest extends Phaser.Scene {
     runState.carried = [];
     setBanner('CLONE LOST', 1.9);
     pushFeed(lost > 0 ? `Cargo lost: ${lost} item${lost > 1 ? 's' : ''}` : 'Clone lost', PALETTE.hostile);
-    this.playerGfx.setVisible(false);
+    this.rig.setVisible(false);
     this.shieldGfx.setVisible(false);
     this.bladeGfx.clear();
     this.bladeGlow.setVisible(false);
@@ -727,6 +707,7 @@ export class FeelTest extends Phaser.Scene {
     this.kickX -= Math.cos(this.aim) * G.cameraKick;
     this.kickY -= Math.sin(this.aim) * G.cameraKick;
     this.trauma = Math.min(1, this.trauma + G.shotTrauma);
+    this.rig.kick();
     this.sfx.shoot();
   }
 
@@ -1492,7 +1473,7 @@ export class FeelTest extends Phaser.Scene {
     this.waveLive = false;
     this.waveTimer = first ? 1.4 : 2;
     resetVitals();
-    this.playerGfx.setVisible(true);
+    this.rig.setVisible(true);
     this.shieldGfx.setVisible(true);
     this.floor.clear();
     this.floor.render();
