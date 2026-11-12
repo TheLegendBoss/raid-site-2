@@ -1,4 +1,4 @@
-// The feel-test room: one arena, one carbine, one power blade, scavenger
+// The feel-test room: one arena, one SMG, one power blade, scavenger
 // swarms and rogue robots. Everything here exists to answer one question:
 // does being a clone super soldier feel heavy, fast and good for ten minutes?
 import Phaser from 'phaser';

@@ -35,7 +35,7 @@ export const TUNING = {
     stridePerPx: 0.11, // boot phase advanced per px travelled
     strideAmp: 8,
     bootY: 8,
-    recoil: 3.4, // px the carbine and helmet snap back per shot
+    recoil: 3.4, // px the SMG and helmet snap back per shot
     recoilRecover: 34,
     dashStretch: 1.12,
     armsOriginX: 32 / 72, // the arms canvas is 72 wide so the arm and gun can reach out
@@ -45,7 +45,7 @@ export const TUNING = {
   },
 
   gun: {
-    name: 'Carbine',
+    name: 'SMG',
     fireDelay: 0.085,
     spread: 2.2, // degrees
     bulletSpeed: 1050,

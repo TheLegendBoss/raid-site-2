@@ -1,4 +1,6 @@
 // HUD on its own scene so the game camera's shake, zoom and scroll never move it.
+// Static chrome (plates, brackets) is drawn once and again only on resize; the Graphics that change
+// every frame hold just the fills, icons and the weapon animation.
 import Phaser from 'phaser';
 import { FONT, PALETTE, hex } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
@@ -6,10 +8,15 @@ import { runState } from '../game/runState';
 import { clamp } from '../sim/math';
 
 const FEED_LINES = 7;
-const PANEL_W = 312;
-const PANEL_H = 138;
 const BOLT_TRAVEL = 15; // px the bolt slides back
-const MAG_DROP = 46; // px the magazine falls when released
+const MAG_DROP = 26; // px the magazine falls when released
+
+// Layout. Panels hug the screen corners with a 16px margin.
+const MARGIN = 16;
+const VIT = { w: 268, h: 132 }; // vitals + abilities, top-left
+const STA = { w: 214, h: 58 }; // wave status, top-right
+const WEP = { w: 344, h: 152 }; // weapon, bottom-right
+const SLOT = { w: 118, h: 38 };
 
 interface Casing {
   x: number;
@@ -21,28 +28,58 @@ interface Casing {
   age: number;
 }
 
+type Txt = Phaser.GameObjects.Text;
+
+/** A rectangle with the corners cut at 45 degrees, to match the armour in the game. */
+function chamfer(x: number, y: number, w: number, h: number, c: number): Phaser.Math.Vector2[] {
+  return [
+    [x + c, y], [x + w - c, y], [x + w, y + c], [x + w, y + h - c],
+    [x + w - c, y + h], [x + c, y + h], [x, y + h - c], [x, y + c],
+  ].map(([px, py]) => new Phaser.Math.Vector2(px, py));
+}
+
 export class Hud extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image;
   private hurt!: Phaser.GameObjects.Image;
+  private chrome!: Phaser.GameObjects.Graphics;
   private bars!: Phaser.GameObjects.Graphics;
   private panel!: Phaser.GameObjects.Graphics;
   private cross!: Phaser.GameObjects.Graphics;
-  private vitalsText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
-  private helpText!: Phaser.GameObjects.Text;
-  private carryText!: Phaser.GameObjects.Text;
-  private banner!: Phaser.GameObjects.Text;
-  private comboText!: Phaser.GameObjects.Text;
-  private dashLabel!: Phaser.GameObjects.Text;
-  private bladeLabel!: Phaser.GameObjects.Text;
-  private dashTimer!: Phaser.GameObjects.Text;
-  private bladeTimer!: Phaser.GameObjects.Text;
-  private panelTitle!: Phaser.GameObjects.Text;
-  private magCount!: Phaser.GameObjects.Text;
-  private reserveText!: Phaser.GameObjects.Text;
-  private cursorAmmo!: Phaser.GameObjects.Text;
-  private feedTexts: Phaser.GameObjects.Text[] = [];
-  private textCache = new Map<Phaser.GameObjects.Text, string>();
+  private shieldLabel!: Txt;
+  private hullLabel!: Txt;
+  private shieldNum!: Txt;
+  private hullNum!: Txt;
+  private waveText!: Txt;
+  private hostText!: Txt;
+  private subText!: Txt;
+  private fpsText!: Txt;
+  private helpText!: Txt;
+  private carryText!: Txt;
+  private banner!: Txt;
+  private comboText!: Txt;
+  private dashName!: Txt;
+  private bladeName!: Txt;
+  private dashKey!: Txt;
+  private bladeKey!: Txt;
+  private dashTimer!: Txt;
+  private bladeTimer!: Txt;
+  private weaponName!: Txt;
+  private weaponState!: Txt;
+  private magCount!: Txt;
+  private reserveText!: Txt;
+  private cursorAmmo!: Txt;
+  private feedTexts: Txt[] = [];
+  private textCache = new Map<Txt, string>();
+
+  private chromeW = 0;
+  private chromeH = 0;
+  private clock = 0;
+
+  // Damage ghost: the bar's old value lingers, then drains.
+  private ghostSh = 1;
+  private ghostHp = 1;
+  private holdSh = 0;
+  private holdHp = 0;
 
   // Weapon animation state, driven by runState changes.
   private casings: Casing[] = [];
@@ -65,11 +102,12 @@ export class Hud extends Phaser.Scene {
       .setAlpha(0)
       .setDepth(1);
 
+    this.chrome = this.add.graphics().setDepth(4);
     this.bars = this.add.graphics().setDepth(5);
     this.panel = this.add.graphics().setDepth(5);
     this.cross = this.add.graphics().setDepth(9);
 
-    const mk = (size: number, color: number, ox = 0, oy = 0, bold = false): Phaser.GameObjects.Text =>
+    const mk = (size: number, color: number, ox = 0, oy = 0, bold = false): Txt =>
       this.add
         .text(0, 0, '', {
           fontFamily: FONT,
@@ -80,32 +118,47 @@ export class Hud extends Phaser.Scene {
         .setOrigin(ox, oy)
         .setDepth(6);
 
-    this.vitalsText = mk(13, PALETTE.text);
-    this.statusText = mk(13, PALETTE.text, 1, 0).setAlign('right');
+    this.shieldLabel = mk(10, PALETTE.textDim);
+    this.hullLabel = mk(10, PALETTE.textDim);
+    this.shieldNum = mk(15, PALETTE.shield, 1, 0, true);
+    this.hullNum = mk(15, PALETTE.health, 1, 0, true);
+    this.waveText = mk(20, PALETTE.structure, 0, 0, true);
+    this.hostText = mk(12, PALETTE.text, 1, 0);
+    this.subText = mk(11, PALETTE.textDim);
+    this.fpsText = mk(11, PALETTE.textDim, 1, 0);
     this.helpText = mk(11, PALETTE.textDim, 1, 0).setAlign('right');
     this.carryText = mk(13, PALETTE.text, 0.5, 1);
-    this.banner = mk(42, PALETTE.structure, 0.5, 0.5).setDepth(8);
-    this.comboText = mk(22, PALETTE.ammo, 0.5, 0.5).setDepth(8);
-    this.dashLabel = mk(10, PALETTE.text);
-    this.bladeLabel = mk(10, PALETTE.text);
+    this.banner = mk(42, PALETTE.structure, 0.5, 0.5, true).setDepth(8);
+    this.banner.setShadow(0, 0, hex(PALETTE.structure), 14, false, true);
+    this.comboText = mk(22, PALETTE.ammo, 0.5, 0.5, true).setDepth(8);
+    this.dashName = mk(12, PALETTE.text, 0, 0, true);
+    this.bladeName = mk(12, PALETTE.text, 0, 0, true);
+    this.dashKey = mk(9, PALETTE.textDim);
+    this.bladeKey = mk(9, PALETTE.textDim);
     this.dashTimer = mk(15, PALETTE.white, 1, 0.5, true).setDepth(7);
     this.bladeTimer = mk(15, PALETTE.white, 1, 0.5, true).setDepth(7);
-    this.panelTitle = mk(11, PALETTE.textDim);
-    this.magCount = mk(38, PALETTE.ammo, 1, 0, true);
-    this.reserveText = mk(15, PALETTE.textDim, 1, 0);
+    this.weaponName = mk(13, PALETTE.ammo, 0, 0, true);
+    this.weaponState = mk(11, PALETTE.textDim);
+    this.magCount = mk(42, PALETTE.ammo, 1, 0, true);
+    this.magCount.setShadow(0, 0, hex(PALETTE.ammo), 10, false, true);
+    this.reserveText = mk(12, PALETTE.textDim, 1, 0);
     this.cursorAmmo = mk(13, PALETTE.ammo, 0, 0, true);
     for (let i = 0; i < FEED_LINES; i++) {
       this.feedTexts.push(mk(13, PALETTE.text, 0, 1));
     }
 
-    this.setText(this.dashLabel, 'DASH\nSHIFT');
-    this.setText(this.bladeLabel, 'BLADE\nRMB');
-    this.setText(this.panelTitle, 'CARBINE');
+    this.setText(this.shieldLabel, 'SHIELD');
+    this.setText(this.hullLabel, 'HULL');
+    this.setText(this.dashName, 'DASH');
+    this.setText(this.bladeName, 'BLADE');
+    this.setText(this.dashKey, 'SHIFT');
+    this.setText(this.bladeKey, 'RMB');
+    this.setText(this.weaponName, T.gun.name.toUpperCase());
     this.setText(
       this.helpText,
       [
         'WASD move   SHIFT / SPACE dash',
-        'LMB carbine   R reload',
+        `LMB ${T.gun.name}   R reload`,
         'RMB / F arc blade',
         'blade kills refund reserve ammo + shield',
         '1 swarm   2 robot   K clear   T reset room',
@@ -114,24 +167,19 @@ export class Hud extends Phaser.Scene {
     );
   }
 
-  private setText(t: Phaser.GameObjects.Text, s: string): void {
+  private setText(t: Txt, s: string): void {
     if (this.textCache.get(t) === s) return;
     this.textCache.set(t, s);
     t.setText(s);
   }
 
-  private bar(x: number, y: number, w: number, h: number, frac: number, color: number): void {
-    const g = this.bars;
-    g.fillStyle(0x000000, 0.55);
-    g.fillRect(x, y, w, h);
-    g.fillStyle(color, 1);
-    g.fillRect(x + 1, y + 1, Math.max(0, (w - 2) * clamp(frac, 0, 1)), h - 2);
-    g.lineStyle(1, PALETTE.structureDim, 1);
-    g.strokeRect(x, y, w, h);
-  }
+  // ------------------------------------------------------------------
+  // Frame
+  // ------------------------------------------------------------------
 
   update(_time: number, delta: number): void {
     const dt = Math.min(delta / 1000, 0.05);
+    this.clock += dt;
     const s = runState;
     const w = this.scale.width;
     const h = this.scale.height;
@@ -139,67 +187,180 @@ export class Hud extends Phaser.Scene {
     this.vignette.setPosition(w / 2, h / 2).setDisplaySize(w * 1.5, h * 1.5);
     this.hurt.setPosition(w / 2, h / 2).setDisplaySize(w * 1.25, h * 1.25).setAlpha(s.damageFlash * 0.85);
 
-    this.drawVitals();
+    if (w !== this.chromeW || h !== this.chromeH) {
+      this.chromeW = w;
+      this.chromeH = h;
+      this.drawChrome(w, h);
+    }
+
+    this.bars.clear();
+    this.drawVitals(dt);
     this.drawStatus(w);
     this.drawFeedAndBanner(w, h);
     this.drawWeaponPanel(w, h, dt);
     this.drawCrosshair();
   }
 
+  /** A dark plate with a chamfered outline, a faint top sheen and bright corner brackets. */
+  private plate(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, c: number, accent: number): void {
+    const v = chamfer(x, y, w, h, c);
+    g.fillStyle(0x02080a, 0.74);
+    g.fillPoints(v, true);
+    g.fillStyle(0xffffff, 0.035);
+    g.fillRect(x + c, y + 1, w - 2 * c, 9);
+    g.lineStyle(1, PALETTE.structureDim, 1);
+    g.strokePoints(v, true);
+    g.lineStyle(2, accent, 0.95);
+    g.lineBetween(x + c, y, x + c + 24, y);
+    g.lineBetween(x, y + c, x, y + c + 14);
+    g.lineBetween(x + w - c, y + h, x + w - c - 24, y + h);
+    g.lineBetween(x + w, y + h - c, x + w, y + h - c - 14);
+  }
+
+  /** Static chrome, drawn once per size. */
+  private drawChrome(w: number, h: number): void {
+    const g = this.chrome;
+    g.clear();
+    this.plate(g, MARGIN, MARGIN, VIT.w, VIT.h, 7, PALETTE.structure);
+    g.lineStyle(1, PALETTE.structureDim, 0.8);
+    g.lineBetween(MARGIN + 14, MARGIN + 74, MARGIN + VIT.w - 14, MARGIN + 74);
+
+    this.plate(g, w - MARGIN - STA.w, MARGIN, STA.w, STA.h, 7, PALETTE.structure);
+
+    const wx = w - MARGIN - WEP.w;
+    const wy = h - MARGIN - WEP.h;
+    this.plate(g, wx, wy, WEP.w, WEP.h, 9, PALETTE.ammo);
+    g.lineStyle(1, PALETTE.structureDim, 0.8);
+    g.lineBetween(wx + 14, wy + 28, wx + WEP.w - 14, wy + 28);
+  }
+
   // ------------------------------------------------------------------
   // Top-left: vitals and ability cooldowns
   // ------------------------------------------------------------------
 
-  private drawVitals(): void {
-    const s = runState;
+  /** A bar of cells. The ghost shows where the value was a moment ago. */
+  private segBar(x: number, y: number, w: number, h: number, n: number, frac: number, ghost: number, color: number, alpha = 1): void {
     const g = this.bars;
-    g.clear();
-    const x = 18;
-    const bw = 230;
-    const hpFrac = s.hp / s.maxHp;
-    this.bar(x, 18, bw, 9, s.shield / s.maxShield, PALETTE.shield);
-    this.bar(x, 34, bw, 9, hpFrac, hpFrac < 0.3 ? PALETTE.healthLow : PALETTE.health);
-    if (s.refundFlash > 0) {
-      g.lineStyle(2, PALETTE.white, s.refundFlash);
-      g.strokeRect(x - 2, 16, bw + 4, 29);
+    const gap = 2;
+    const sw = (w - (n - 1) * gap) / n;
+    for (let i = 0; i < n; i++) {
+      const sx = x + i * (sw + gap);
+      g.fillStyle(0x0b1a18, 0.95);
+      g.fillRect(sx, y, sw, h);
+      const gf = clamp(ghost * n - i, 0, 1);
+      if (gf > 0) {
+        g.fillStyle(PALETTE.white, 0.55);
+        g.fillRect(sx, y, sw * gf, h);
+      }
+      const f = clamp(frac * n - i, 0, 1);
+      if (f > 0) {
+        g.fillStyle(color, alpha);
+        g.fillRect(sx, y, sw * f, h);
+        g.fillStyle(PALETTE.white, 0.2 * alpha);
+        g.fillRect(sx, y, sw * f, 2);
+      }
     }
-    this.setText(this.vitalsText, `SHIELD ${Math.floor(s.shield)}   HULL ${Math.ceil(Math.max(0, s.hp))}`);
-    this.vitalsText.setPosition(x, 48);
-
-    const by = 70;
-    this.ability(x, by, s.dashReady, s.dashPing, s.dashDeny, PALETTE.structure);
-    this.ability(x + 86, by, s.bladeReady, s.bladePing, s.bladeDeny, PALETTE.white);
-    this.dashLabel.setPosition(x + 6, by + 5);
-    this.bladeLabel.setPosition(x + 92, by + 5);
-    const dashLeft = (1 - s.dashReady) * T.player.dashCooldown;
-    const bladeLeft = (1 - s.bladeReady) * T.sword.cooldown;
-    this.setText(this.dashTimer, dashLeft > 0.05 ? dashLeft.toFixed(1) : '');
-    this.setText(this.bladeTimer, bladeLeft > 0.05 ? bladeLeft.toFixed(1) : '');
-    this.dashTimer.setPosition(x + 76, by + 20);
-    this.bladeTimer.setPosition(x + 162, by + 20);
   }
 
-  /** A cooldown box: fills left to right as it recharges, rings white when it comes back. */
-  private ability(x: number, y: number, ready: number, ping: number, deny: number, color: number): void {
+  private drawVitals(dt: number): void {
+    const s = runState;
     const g = this.bars;
-    const w = 78;
-    const h = 40;
+    const x = MARGIN + 14;
+    const y = MARGIN;
+    const bw = VIT.w - 28;
+
+    const shF = clamp(s.shield / s.maxShield, 0, 1);
+    const hpF = clamp(s.hp / s.maxHp, 0, 1);
+    if (shF >= this.ghostSh) {
+      this.ghostSh = shF;
+      this.holdSh = 0.45;
+    } else {
+      this.holdSh -= dt;
+      if (this.holdSh <= 0) this.ghostSh = Math.max(shF, this.ghostSh - dt * 0.8);
+    }
+    if (hpF >= this.ghostHp) {
+      this.ghostHp = hpF;
+      this.holdHp = 0.45;
+    } else {
+      this.holdHp -= dt;
+      if (this.holdHp <= 0) this.ghostHp = Math.max(hpF, this.ghostHp - dt * 0.8);
+    }
+
+    const lowHull = hpF < 0.3;
+    const pulse = lowHull ? 0.7 + 0.3 * Math.sin(this.clock * 9) : 1;
+    this.shieldLabel.setPosition(x, y + 11);
+    this.hullLabel.setPosition(x, y + 43);
+    this.setText(this.shieldNum, String(Math.floor(s.shield)));
+    this.setText(this.hullNum, String(Math.ceil(Math.max(0, s.hp))));
+    this.shieldNum.setPosition(x + bw, y + 8);
+    this.hullNum.setColor(hex(lowHull ? PALETTE.healthLow : PALETTE.health)).setPosition(x + bw, y + 40);
+    this.segBar(x, y + 26, bw, 9, 20, shF, this.ghostSh, PALETTE.shield);
+    this.segBar(x, y + 58, bw, 9, 20, hpF, this.ghostHp, lowHull ? PALETTE.healthLow : PALETTE.health, pulse);
+
+    if (s.refundFlash > 0) {
+      g.lineStyle(2, PALETTE.white, s.refundFlash);
+      g.strokePoints(chamfer(MARGIN - 2, MARGIN - 2, VIT.w + 4, VIT.h + 4, 8), true);
+    }
+
+    const sy = y + 82;
+    this.slot(x, sy, s.dashReady, s.dashPing, s.dashDeny, PALETTE.structure, 'dash');
+    this.slot(x + SLOT.w + 8, sy, s.bladeReady, s.bladePing, s.bladeDeny, PALETTE.white, 'blade');
+    const dashLeft = (1 - s.dashReady) * T.player.dashCooldown;
+    const bladeLeft = (1 - s.bladeReady) * T.sword.cooldown;
+    this.dashName.setPosition(x + 38, sy + 6);
+    this.dashKey.setPosition(x + 38, sy + 23);
+    this.bladeName.setPosition(x + SLOT.w + 8 + 38, sy + 6);
+    this.bladeKey.setPosition(x + SLOT.w + 8 + 38, sy + 23);
+    this.setText(this.dashTimer, dashLeft > 0.05 ? dashLeft.toFixed(1) : '');
+    this.setText(this.bladeTimer, bladeLeft > 0.05 ? bladeLeft.toFixed(1) : '');
+    this.dashTimer.setPosition(x + SLOT.w - 8, sy + SLOT.h / 2 + 8);
+    this.bladeTimer.setPosition(x + 2 * SLOT.w + 8 - 8, sy + SLOT.h / 2 + 8);
+  }
+
+  /** A cooldown slot: fills left to right as it recharges, rings white when it comes back. */
+  private slot(x: number, y: number, ready: number, ping: number, deny: number, color: number, icon: 'dash' | 'blade'): void {
+    const g = this.bars;
+    const { w, h } = SLOT;
     const isReady = ready >= 1;
-    g.fillStyle(0x000000, 0.55);
-    g.fillRect(x, y, w, h);
-    g.fillStyle(color, isReady ? 0.22 : 0.3);
-    g.fillRect(x + 1, y + 1, (w - 2) * clamp(ready, 0, 1), h - 2);
+    const v = chamfer(x, y, w, h, 6);
+    g.fillStyle(0x010607, 0.85);
+    g.fillPoints(v, true);
+    g.fillStyle(color, isReady ? 0.18 : 0.3);
+    g.fillRect(x + 1, y + 6, (w - 2) * clamp(ready, 0, 1), h - 12);
     if (deny > 0) {
-      g.fillStyle(PALETTE.hostile, deny * 0.4);
-      g.fillRect(x, y, w, h);
+      g.fillStyle(PALETTE.hostile, deny * 0.45);
+      g.fillPoints(v, true);
     }
     g.lineStyle(isReady ? 2 : 1, deny > 0 ? PALETTE.hostile : isReady ? color : PALETTE.textDim, 1);
-    g.strokeRect(x, y, w, h);
+    g.strokePoints(v, true);
+
+    // Icon.
+    const ic = isReady ? color : PALETTE.textDim;
+    const ix = x + 9;
+    const iy = y + 9;
+    g.lineStyle(2.4, ic, 1);
+    if (icon === 'dash') {
+      for (let i = 0; i < 3; i++) {
+        const cx = ix + i * 7;
+        g.lineBetween(cx, iy, cx + 6, iy + 10);
+        g.lineBetween(cx + 6, iy + 10, cx, iy + 20);
+      }
+    } else {
+      g.lineStyle(3, ic, 1);
+      g.lineBetween(ix + 2, iy + 20, ix + 22, iy);
+      g.lineStyle(2, ic, 1);
+      g.lineBetween(ix + 5, iy + 11, ix + 11, iy + 17);
+      g.lineStyle(1, ic, 0.6);
+      g.beginPath();
+      g.arc(ix + 2, iy + 20, 14, -Math.PI * 0.42, -Math.PI * 0.05, false);
+      g.strokePath();
+    }
+
     if (ping > 0) {
       g.fillStyle(PALETTE.white, ping * 0.3);
-      g.fillRect(x, y, w, h);
+      g.fillPoints(v, true);
       g.lineStyle(3, PALETTE.white, ping);
-      g.strokeRect(x - 3, y - 3, w + 6, h + 6);
+      g.strokePoints(chamfer(x - 3, y - 3, w + 6, h + 6, 8), true);
     }
   }
 
@@ -209,23 +370,32 @@ export class Hud extends Phaser.Scene {
 
   private drawStatus(w: number): void {
     const s = runState;
-    const wave = s.wave === 0 ? 'WAVE -' : `WAVE ${s.wave}`;
-    const next = s.intermission > 0 ? `\nNEXT WAVE ${s.intermission.toFixed(1)}s` : '';
-    this.setText(
-      this.statusText,
-      `${wave}   HOSTILES ${s.mobsAlive}${next}\n${Math.round(this.game.loop.actualFps)} FPS${s.muted ? '   MUTED' : ''}`,
-    );
-    this.statusText.setPosition(w - 18, 16);
-    this.helpText.setVisible(s.showHelp).setPosition(w - 18, 74);
+    const x = w - MARGIN - STA.w;
+    this.setText(this.waveText, s.wave === 0 ? 'WAVE -' : `WAVE ${s.wave}`);
+    this.waveText.setPosition(x + 14, MARGIN + 7);
+    this.setText(this.hostText, `${s.mobsAlive} HOSTILE${s.mobsAlive === 1 ? '' : 'S'}`);
+    this.hostText.setColor(hex(s.mobsAlive > 0 ? PALETTE.hostile : PALETTE.textDim)).setPosition(x + STA.w - 14, MARGIN + 12);
+    this.setText(this.subText, s.intermission > 0 ? `NEXT WAVE ${s.intermission.toFixed(1)}s` : s.mobsAlive > 0 ? 'ENGAGED' : 'CLEAR');
+    this.subText.setPosition(x + 14, MARGIN + 36);
+    this.setText(this.fpsText, `${Math.round(this.game.loop.actualFps)} FPS${s.muted ? '  MUTED' : ''}`);
+    this.fpsText.setPosition(x + STA.w - 14, MARGIN + 36);
+    this.helpText.setVisible(s.showHelp).setPosition(w - MARGIN, MARGIN + STA.h + 10);
   }
 
   private drawFeedAndBanner(w: number, h: number): void {
     const s = runState;
+    const g = this.bars;
     this.setText(
       this.carryText,
       `CARRIED ${s.carried.length}   STASH ${s.stash.length}   [X] extract (carried is lost on death)`,
     );
-    this.carryText.setPosition(w / 2, h - 16);
+    this.carryText.setPosition(w / 2, h - MARGIN);
+    const cw = this.carryText.width + 28;
+    const ch = this.carryText.height + 8;
+    g.fillStyle(0x02080a, 0.6);
+    g.fillPoints(chamfer(w / 2 - cw / 2, h - MARGIN - ch + 4, cw, ch, 5), true);
+    g.lineStyle(1, PALETTE.structureDim, 1);
+    g.strokePoints(chamfer(w / 2 - cw / 2, h - MARGIN - ch + 4, cw, ch, 5), true);
 
     for (let i = 0; i < FEED_LINES; i++) {
       const t = this.feedTexts[i];
@@ -236,16 +406,34 @@ export class Hud extends Phaser.Scene {
       }
       const fade = 1 - clamp((line.age - (T.loot.feedSeconds - 1.2)) / 1.2, 0, 1);
       this.setText(t, line.text);
-      t.setColor(hex(line.color)).setAlpha(fade).setVisible(true).setPosition(18, h - 48 - i * 19);
+      const ty = h - 56 - i * 24;
+      t.setColor(hex(line.color)).setAlpha(fade).setVisible(true).setPosition(MARGIN + 14, ty);
+      // Plate with a rarity-coloured tick.
+      g.fillStyle(0x02080a, 0.6 * fade);
+      g.fillRect(MARGIN, ty - 19, t.width + 28, 22);
+      g.fillStyle(line.color, 0.95 * fade);
+      g.fillRect(MARGIN, ty - 19, 3, 22);
     }
 
     if (s.bannerTime > 0) {
+      const lost = s.banner.includes('LOST');
+      const col = lost ? PALETTE.hostile : PALETTE.structure;
       this.setText(this.banner, s.banner);
+      const a = clamp(s.bannerTime / 0.5, 0, 1);
+      const by = h * 0.2;
       this.banner
-        .setColor(hex(s.banner.includes('LOST') ? PALETTE.hostile : PALETTE.structure))
-        .setAlpha(clamp(s.bannerTime / 0.5, 0, 1))
-        .setPosition(w / 2, h * 0.2)
+        .setColor(hex(col))
+        .setAlpha(a)
+        .setPosition(w / 2, by)
         .setVisible(true);
+      this.banner.setShadow(0, 0, hex(col), 14, false, true);
+      const half = this.banner.width / 2;
+      g.lineStyle(2, col, a * 0.85);
+      g.lineBetween(w / 2 - half - 110, by, w / 2 - half - 20, by);
+      g.lineBetween(w / 2 + half + 20, by, w / 2 + half + 110, by);
+      g.lineStyle(1, col, a * 0.5);
+      g.lineBetween(w / 2 - half - 90, by + 8, w / 2 - half - 20, by + 8);
+      g.lineBetween(w / 2 + half + 20, by + 8, w / 2 + half + 90, by + 8);
     } else {
       this.banner.setVisible(false);
     }
@@ -258,7 +446,7 @@ export class Hud extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------------
-  // Weapon panel: a side-on carbine whose action works, rounds, reserve
+  // Weapon panel: a side-on SMG whose action works, rounds, reserve
   // ------------------------------------------------------------------
 
   private drawWeaponPanel(w: number, h: number, dt: number): void {
@@ -267,10 +455,10 @@ export class Hud extends Phaser.Scene {
     const g = this.panel;
     g.clear();
 
-    const x0 = w - PANEL_W - 18;
-    const y0 = h - PANEL_H - 18;
-    const gx = x0 + 14; // gun origin: stock end
-    const gy = y0 + 70; // gun centre line
+    const x0 = w - MARGIN - WEP.w;
+    const y0 = h - MARGIN - WEP.h;
+    const gx = x0 + 18; // gun origin: stock end
+    const gy = y0 + 62; // gun centre line
 
     // React to shots fired since last frame.
     if (s.shotSeq !== this.lastShotSeq) {
@@ -280,18 +468,12 @@ export class Hud extends Phaser.Scene {
         this.kick = 1;
         this.muzzle = 1;
         this.pipFlash = 1;
-        this.spawnCasing(gx + 68, gy - 13);
+        this.spawnCasing(gx + 84, gy - 12);
       }
     }
     this.kick *= Math.exp(-24 * dt);
     this.muzzle = Math.max(0, this.muzzle - dt * 22);
     this.pipFlash = Math.max(0, this.pipFlash - dt * 5);
-
-    // Panel backing.
-    g.fillStyle(0x000000, 0.5);
-    g.fillRect(x0, y0, PANEL_W, PANEL_H);
-    g.lineStyle(1, PALETTE.structureDim, 1);
-    g.strokeRect(x0, y0, PANEL_W, PANEL_H);
 
     // Work out the action pose from the reload progress.
     const reloading = s.reload >= 0;
@@ -321,65 +503,71 @@ export class Hud extends Phaser.Scene {
       bolt = BOLT_TRAVEL; // bolt locked back on an empty magazine
     }
 
-    this.drawCarbine(gx, gy, bolt, magY, magA, s.mag, this.muzzle);
+    this.drawSmg(gx, gy, bolt, magY, magA, s.mag, this.muzzle);
     this.drawCasings(dt);
 
-    // Rounds remaining, as pips.
+    // Rounds remaining, as cells.
     const total = s.magSize;
     const loaded = this.pipsLoaded(p, s.mag, s.reserve, total, seat);
     const low = s.mag <= Math.ceil(total * 0.2);
-    const px0 = x0 + 12;
-    const py = y0 + PANEL_H - 22;
+    const px0 = x0 + 14;
+    const py = y0 + WEP.h - 26;
     const gap = 2;
-    const pw = (PANEL_W - 24 - (total - 1) * gap) / total;
+    const pw = (WEP.w - 28 - (total - 1) * gap) / total;
     for (let i = 0; i < total; i++) {
       const x = px0 + i * (pw + gap);
       if (i < loaded) {
-        g.fillStyle(low && !reloading ? PALETTE.healthLow : PALETTE.ammo, 1);
+        const c = low && !reloading ? PALETTE.healthLow : PALETTE.ammo;
+        g.fillStyle(c, 1);
         g.fillRect(x, py, pw, 12);
+        g.fillStyle(PALETTE.white, 0.28);
+        g.fillRect(x, py, pw, 3);
       } else if (i === s.mag && this.pipFlash > 0 && !reloading) {
         g.fillStyle(PALETTE.white, this.pipFlash);
         g.fillRect(x, py, pw, 12);
       } else {
-        g.lineStyle(1, PALETTE.textDim, 0.7);
+        g.fillStyle(0x0b1a18, 0.9);
+        g.fillRect(x, py, pw, 12);
+        g.lineStyle(1, PALETTE.textDim, 0.45);
         g.strokeRect(x + 0.5, py + 0.5, pw - 1, 11);
       }
     }
 
-    // Reload bar above the pips.
+    // Reload bar under the header.
     if (reloading) {
       g.fillStyle(0x000000, 0.6);
-      g.fillRect(x0 + 12, py - 10, PANEL_W - 24, 4);
+      g.fillRect(x0 + 14, y0 + 32, WEP.w - 28, 3);
       g.fillStyle(PALETTE.ammo, 1);
-      g.fillRect(x0 + 12, py - 10, (PANEL_W - 24) * clamp(p, 0, 1), 4);
+      g.fillRect(x0 + 14, y0 + 32, (WEP.w - 28) * clamp(p, 0, 1), 3);
     }
 
     // Numbers and status.
     const noAmmo = s.mag < 1 && s.reserve < 1 && !reloading;
-    let title = 'CARBINE';
-    let titleColor: number = PALETTE.textDim;
+    let state = '';
+    let stateColor: number = PALETTE.textDim;
     if (reloading) {
-      title = s.reloadEmpty ? 'RELOADING  (BOLT)' : 'RELOADING';
-      titleColor = PALETTE.ammo;
+      state = s.reloadEmpty ? 'RELOADING  (BOLT)' : 'RELOADING';
+      stateColor = PALETTE.ammo;
     } else if (noAmmo) {
-      title = 'NO AMMO';
-      titleColor = PALETTE.healthLow;
+      state = 'NO AMMO';
+      stateColor = PALETTE.healthLow;
     } else if (low && s.reserve >= 1) {
-      title = 'LOW  [R] RELOAD';
-      titleColor = PALETTE.healthLow;
+      state = 'LOW  [R] RELOAD';
+      stateColor = PALETTE.healthLow;
     }
-    this.setText(this.panelTitle, title);
-    this.panelTitle.setColor(hex(titleColor)).setPosition(x0 + 12, y0 + 8);
+    this.weaponName.setPosition(x0 + 14, y0 + 8);
+    this.setText(this.weaponState, state);
+    this.weaponState.setColor(hex(stateColor)).setPosition(x0 + 14 + this.weaponName.width + 12, y0 + 10);
 
+    const magCol = s.mag < 1 || low ? PALETTE.healthLow : reloading ? PALETTE.textDim : PALETTE.ammo;
     this.setText(this.magCount, String(s.mag));
-    this.magCount
-      .setColor(hex(s.mag < 1 ? PALETTE.healthLow : low ? PALETTE.healthLow : reloading ? PALETTE.textDim : PALETTE.ammo))
-      .setPosition(x0 + PANEL_W - 12, y0 + 6);
-    this.setText(this.reserveText, `/ ${Math.floor(s.reserve)}`);
-    this.reserveText.setPosition(x0 + PANEL_W - 12, y0 + 50);
+    this.magCount.setColor(hex(magCol)).setPosition(x0 + WEP.w - 14, y0 + 34);
+    this.magCount.setShadow(0, 0, hex(magCol), reloading ? 0 : 10, false, true);
+    this.setText(this.reserveText, `RESERVE ${Math.floor(s.reserve)}`);
+    this.reserveText.setPosition(x0 + WEP.w - 14, y0 + 84);
   }
 
-  /** How many pips read as loaded. While reloading they fill once the magazine has seated. */
+  /** How many cells read as loaded. While reloading they fill once the magazine has seated. */
   private pipsLoaded(p: number, mag: number, reserve: number, total: number, seat: number): number {
     if (p < 0) return mag;
     if (p < seat) return mag;
@@ -388,50 +576,66 @@ export class Hud extends Phaser.Scene {
     return Math.floor(mag + (target - mag) * k);
   }
 
-  private drawCarbine(gx: number, gy: number, bolt: number, magY: number, magA: number, mag: number, muzzle: number): void {
+  /** The SMG in profile, facing right. Matches the in-game model: folded stock, red dot, vented shroud. */
+  private drawSmg(gx: number, gy: number, bolt: number, magY: number, magA: number, mag: number, muzzle: number): void {
     const g = this.panel;
     const line = PALETTE.structure;
-    const body = 0x0d1c1e;
-    const poly = (pts: number[][], fill: number, fa: number, stroke: number, lw: number): void => {
-      const v = pts.map(([x, y]) => new Phaser.Math.Vector2(gx + x, gy + y));
+    const body = 0x0b1a1c;
+    const poly = (pts: Phaser.Math.Vector2[], fill: number, fa: number, stroke: number, lw: number): void => {
       g.fillStyle(fill, fa);
-      g.fillPoints(v, true);
-      g.lineStyle(lw, stroke, fa < 1 ? 1 : 1);
-      g.strokePoints(v, true);
-    };
-    const rect = (x: number, y: number, w: number, h: number, fill: number, fa: number, stroke: number, lw: number): void => {
-      g.fillStyle(fill, fa);
-      g.fillRect(gx + x, gy + y, w, h);
+      g.fillPoints(pts, true);
       g.lineStyle(lw, stroke, 1);
-      g.strokeRect(gx + x, gy + y, w, h);
+      g.strokePoints(pts, true);
     };
+    const slab = (x: number, y: number, w: number, h: number, c: number, fill: number = body, fa = 1, stroke: number = line, lw = 2): void =>
+      poly(chamfer(gx + x, gy + y, w, h, c), fill, fa, stroke, lw);
 
-    // Magazine goes first so the receiver draws over its top.
+    // Grip sleeve, then the magazine inside it, so the receiver covers its top.
+    poly(
+      [[44, 10], [66, 10], [62, 38], [40, 38]].map(([px, py]) => new Phaser.Math.Vector2(gx + px, gy + py)),
+      0x050d0e, 1, PALETTE.structureDim, 1.5,
+    );
     if (magA > 0.01) {
-      rect(64, 10 + magY, 17, 30, body, magA, line, 2);
+      slab(46, 8 + magY, 16, 34, 3, body, magA, line, 2);
       g.lineStyle(1, PALETTE.ammo, magA * 0.9);
-      const rounds = clamp(Math.ceil((mag / T.gun.magSize) * 4), 0, 4);
-      for (let i = 0; i < rounds; i++) g.lineBetween(gx + 68, gy + 15 + magY + i * 6, gx + 77, gy + 15 + magY + i * 6);
+      const rounds = clamp(Math.ceil((mag / T.gun.magSize) * 5), 0, 5);
+      for (let i = 0; i < rounds; i++) g.lineBetween(gx + 50, gy + 15 + magY + i * 5, gx + 58, gy + 15 + magY + i * 5);
     }
 
-    poly([[0, -6], [30, -10], [30, 10], [0, 14]], body, 1, line, 2); // stock
-    poly([[46, 10], [60, 10], [56, 32], [42, 32]], body, 1, line, 2); // grip
-    rect(30, -14, 68, 24, body, 1, line, 2); // receiver
-    rect(98, -11, 40, 18, body, 1, line, 2); // handguard
-    rect(138, -6, 24, 8, body, 1, line, 2); // barrel
-    rect(162, -9, 8, 14, body, 1, line, 2); // muzzle brake
-    rect(44, -24, 36, 8, body, 1, line, 1.5); // optic
-    g.lineStyle(1.5, line, 1);
-    g.lineBetween(gx + 50, gy - 16, gx + 50, gy - 14);
-    g.lineBetween(gx + 74, gy - 16, gx + 74, gy - 14);
+    slab(0, -9, 22, 15, 3); // folded stock
+    g.lineStyle(1.5, PALETTE.structureDim, 1);
+    g.lineBetween(gx + 4, gy - 2, gx + 18, gy - 2);
+    slab(18, -17, 78, 30, 6); // receiver
+    g.lineStyle(1, line, 0.35);
+    g.lineBetween(gx + 24, gy - 13, gx + 90, gy - 13);
+    slab(96, -14, 44, 24, 4); // shroud
+    g.lineStyle(1.5, PALETTE.structureDim, 1);
+    for (let i = 0; i < 5; i++) g.lineBetween(gx + 104 + i * 7, gy - 9, gx + 104 + i * 7, gy + 5);
+    poly(chamfer(gx + 140, gy - 9, 20, 8, 1.5), body, 1, line, 2); // barrel
+    slab(160, -12, 12, 14, 2); // muzzle brake
+
+    // Red dot sight on the rail.
+    slab(50, -29, 26, 11, 2, 0x0d1c1e, 1, line, 1.8);
+    g.fillStyle(PALETTE.hostile, 1);
+    g.fillCircle(gx + 56, gy - 23.5, 2.2);
+    g.fillStyle(PALETTE.hostile, 0.25);
+    g.fillCircle(gx + 56, gy - 23.5, 5);
+
+    // Trigger guard.
+    g.lineStyle(1.5, line, 0.9);
+    g.beginPath();
+    g.moveTo(gx + 70, gy + 13);
+    g.lineTo(gx + 72, gy + 22);
+    g.lineTo(gx + 62, gy + 22);
+    g.strokePath();
 
     // Ejection port, then the bolt sliding back over it.
-    rect(60, -14, 18, 5, 0x000000, 1, PALETTE.structureDim, 1);
-    rect(66 - bolt, -13, 24, 7, PALETTE.ammo, 0.9, PALETTE.white, 1.5);
+    slab(66, -15, 22, 6, 1.5, 0x000000, 1, PALETTE.structureDim, 1);
+    slab(70 - bolt, -15, 22, 7, 1.5, PALETTE.ammo, 0.92, PALETTE.white, 1.4);
 
     if (muzzle > 0.05) {
-      const mx = gx + 172;
-      const my = gy - 2;
+      const mx = gx + 174;
+      const my = gy - 5;
       g.fillStyle(PALETTE.muzzle, muzzle * 0.9);
       g.fillCircle(mx + 5, my, 5 + muzzle * 5);
       g.lineStyle(2, PALETTE.white, muzzle);

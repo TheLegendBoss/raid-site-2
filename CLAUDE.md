@@ -21,7 +21,7 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 
 ## Combat model
 
-- Carbine uses a magazine plus reserve (`TUNING.gun`). Reload state, dash/blade cooldown fractions and the shot counter reach the HUD through `runState` (`reload`, `shotSeq`, `dashReady`, `bladeReady`, ping/deny flashes). The HUD animates the bolt, magazine and ejected casings from those fields.
+- The SMG uses a magazine plus reserve (`TUNING.gun`). Reload state, dash/blade cooldown fractions and the shot counter reach the HUD through `runState` (`reload`, `shotSeq`, `dashReady`, `bladeReady`, ping/deny flashes). The HUD animates the bolt, magazine and ejected casings from those fields.
 - Damage is rolled in `src/sim/damage.ts` (`rollDamage`) and shown as pooled floating numbers (`TUNING.numbers`).
 - Keys: R reload, T reset room, H toggle help.
 - The Neo Zero tileset is not in the repo: its licence forbids redistribution and use in anything where the assets can be extracted (a public repo or single-file release would qualify). Do not commit it without the owner's decision.
@@ -29,7 +29,7 @@ Real-time top-down looter shooter. Phaser 4 + TypeScript (strict) + Vite. A clon
 ## Art pipeline (character parts)
 
 - Source of truth: `art/clone.vx.js`. Rebuild with a local clone of github.com/uilianks/vex (MIT, Node >= 22.18): `node <vex>/bin/vex.js build art/clone.vx.js --scales 4`, then copy `out/sprites/clone_*@4x.png` to `src/assets/art/clone_*.png`. vex is not vendored in this repo.
-- Parts share a 64x64 canvas centred on (32,32), so they stack at one origin and animate by offsets (`src/fx/playerRig.ts`). Carbine tip is at x=63, which `TUNING.gun.muzzleOffset` matches.
+- Parts share a 64x64 canvas centred on (32,32), so they stack at one origin and animate by offsets (`src/fx/playerRig.ts`). The SMG muzzle is at x=70.6 in the 72-wide arms canvas, which `TUNING.gun.muzzleOffset` matches.
 
 ## Terminology
 

@@ -1,5 +1,5 @@
 // The clone as stacked art parts (built in art/clone.vx.js). Facing +x; the container rotates
-// with the aim. Boots stride with distance travelled, the carbine and head kick back on a shot.
+// with the aim. Boots stride with distance travelled, the SMG and head kick back on a shot.
 import Phaser from 'phaser';
 import { TUNING } from '../data/tuning';
 

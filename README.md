@@ -2,7 +2,7 @@
 
 A cloned super soldier pushes into a network of sealed, derelict sites. Looter shooter, real-time, top-down, keyboard and mouse. Vector art on near-black.
 
-This repo starts as a **feel test**: one arena, one carbine, one power blade, scavenger swarms and rogue robots. The only question it answers is whether being the soldier feels heavy and good for ten minutes. Design docs come after the answer is yes.
+This repo starts as a **feel test**: one arena, one SMG, one power blade, scavenger swarms and rogue robots. The only question it answers is whether being the soldier feels heavy and good for ten minutes. Design docs come after the answer is yes.
 
 ## Run
 
@@ -26,7 +26,7 @@ To cut a release: bump `version` in `package.json`, commit, then `git tag vX.Y.Z
 |---|---|
 | WASD | Move |
 | Mouse | Aim |
-| Left mouse | Carbine: 30-round magazine plus reserve. Empty trigger pull auto-reloads |
+| Left mouse | SMG: 30-round magazine plus reserve. Empty trigger pull auto-reloads |
 | R | Reload (tactical reload is quicker than reloading from empty) |
 | Right mouse or F | Arc blade: wind-up, lunging cleave, bisects scavengers. 0.8s cooldown; kills refund reserve ammo and shield |
 | Shift or Space | Dash (brief invulnerability, 0.9s cooldown) |
@@ -41,7 +41,7 @@ Blade kills refund ammo and shield, so wading in is rewarded over kiting. Dying 
 
 ## What to judge
 
-- Does the carbine have weight (recoil, kick, muzzle light, casings)?
+- Does the SMG have weight (recoil, kick, muzzle light, casings)?
 - Does the blade feel committed and powerful (wind-up, lunge, hit-stop, bisect)?
 - Are robots readable (red-violet laser telegraph, then a three-round burst)? Blade cuts their shots out of the air.
 - Do the sounds sell material: wet for scavengers, metal for robots, a booming robot death?
