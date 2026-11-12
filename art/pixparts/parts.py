@@ -200,9 +200,9 @@ def mag_curved() -> Canvas:
 
 def mag_extended() -> Canvas:
     c = Canvas()
-    c.shaded(1, 1, 4, 17, 'n')
-    c.rect(1, 1, 1, 17, 'd'); c.rect(1, 17, 4, 17, 'a')
-    for y in (4, 7, 10, 13):
+    c.shaded(1, 1, 4, 14, 'n')
+    c.rect(1, 1, 1, 14, 'd'); c.rect(1, 14, 4, 14, 'a')
+    for y in (4, 7, 10):
         c.rect(2, y, 4, y, 'b')
     c.outline(); return c
 

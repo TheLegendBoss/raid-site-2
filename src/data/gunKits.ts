@@ -28,12 +28,12 @@ export const FINISH_DARK: readonly Rgb[] = [[10, 12, 12], [24, 27, 27], [42, 46,
 
 /** Keyed by GunShape in items.ts. */
 export const GUN_KITS: Record<string, GunKit> = {
-  smg: { body: 'body_projectile_01', barrel: 'barrel_suppressor', stock: 'stock_wire', scope: 'scope_reflex', finish: 'gunmetal', mag: { part: 'mag_curved', x: 25, y: 16 } },
-  pistol: { body: 'body_projectile_02', barrel: 'barrel_brake', stock: 'stock_ring', scope: 'laser_pointer', finish: 'gunmetal', mag: { part: 'mag_stick', x: 17, y: 16 } },
-  magnum: { body: 'body_projectile_03', barrel: 'barrel_heavy_short', scope: 'scope_iron', finish: 'bronze', mag: { part: 'mag_stick', x: 16, y: 17 } },
-  shotgun: { body: 'body_projectile_03', barrel: 'barrel_flared', stock: 'stock_buttplate', finish: 'rust', mag: { part: 'mag_drum', x: 14, y: 17 } },
-  marksman: { body: 'body_projectile_03', barrel: 'barrel_rifle', stock: 'stock_cheek', scope: 'scope_long', finish: 'gunmetal', mag: { part: 'mag_extended', x: 25, y: 17 } },
-  burst: { body: 'body_projectile_02', barrel: 'barrel_brake', stock: 'stock_04', scope: 'scope_prism', under: 'under_grip', finish: 'gunmetal', mag: { part: 'mag_curved', x: 26, y: 17 } },
+  smg: { body: 'body_projectile_01', barrel: 'barrel_suppressor', stock: 'stock_wire', scope: 'scope_reflex', finish: 'gunmetal', mag: { part: 'mag_curved', x: 23, y: 16 } },
+  pistol: { body: 'body_projectile_02', barrel: 'barrel_brake', stock: 'stock_ring', scope: 'laser_pointer', finish: 'gunmetal', mag: { part: 'mag_stick', x: 13, y: 16 } },
+  magnum: { body: 'body_projectile_03', barrel: 'barrel_heavy_short', scope: 'scope_iron', finish: 'bronze', mag: { part: 'mag_stick', x: 13, y: 16 } },
+  shotgun: { body: 'body_projectile_03', barrel: 'barrel_flared', stock: 'stock_buttplate', finish: 'rust', mag: { part: 'mag_drum', x: 24, y: 17 } },
+  marksman: { body: 'body_projectile_03', barrel: 'barrel_rifle', stock: 'stock_cheek', scope: 'scope_long', finish: 'gunmetal', mag: { part: 'mag_extended', x: 25, y: 15 } },
+  burst: { body: 'body_projectile_02', barrel: 'barrel_brake', stock: 'stock_04', scope: 'scope_prism', under: 'under_grip', finish: 'gunmetal', mag: { part: 'mag_curved', x: 26, y: 16 } },
 };
 
 /** Parts are shifted this many sprite px along the barrel so the seam with the body closes. */

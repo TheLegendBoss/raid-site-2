@@ -54,14 +54,17 @@ function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
 }
 
 /** Remap the purple body ramp and the navy secondary parts onto a finish. */
-function recolour(img: ImageData, stops: readonly Rgb[]): void {
+/** Magazines map their navy onto the finish's own mid tones so they read against the dark panel; guns use the dark ramp. */
+function recolour(img: ImageData, stops: readonly Rgb[], navyFromFinish = false): void {
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     const [h, s, v] = rgbToHsv(d[i] / 255, d[i + 1] / 255, d[i + 2] / 255);
     let c: Rgb | null = null;
     if (h >= 0.72 && h <= 0.95 && s > 0.45 && v > 0.3) c = ramp(stops, (v - 0.35) / 0.62);
-    else if (h >= 0.55 && h < 0.72 && v < 0.6 && v > 0.12) c = ramp(FINISH_DARK, (v - 0.12) / 0.45);
+    else if (h >= 0.55 && h < 0.72 && v < 0.6 && v > 0.12) {
+      c = navyFromFinish ? ramp(stops, 0.15 + ((v - 0.12) / 0.45) * 0.7) : ramp(FINISH_DARK, (v - 0.12) / 0.45);
+    }
     if (c) {
       d[i] = c[0];
       d[i + 1] = c[1];
@@ -128,7 +131,7 @@ export function bakePixGuns(scene: Phaser.Scene): void {
       if (!mctx) continue;
       mctx.drawImage(msrc, 0, 0);
       const mimg = mctx.getImageData(0, 0, mc.width, mc.height);
-      recolour(mimg, FINISHES[kit.finish]);
+      recolour(mimg, FINISHES[kit.finish], true);
       mctx.putImageData(mimg, 0, 0);
       scene.textures.addCanvas(mkey, mc)?.setFilter(Phaser.Textures.FilterMode.NEAREST);
     }
