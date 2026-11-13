@@ -201,6 +201,5 @@ export const TUNING = {
     magnetDelay: 0.4,
     magnetSpeed: 620,
     feedSeconds: 6,
-    carrySlots: 10, // base carried-item cap; research raises it
   },
 } as const;

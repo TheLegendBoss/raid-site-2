@@ -75,7 +75,7 @@ export interface EffectiveStats {
   bladeReach: number;
   bladeRefund: number; // multiplier on the reserve and shield refunded per blade kill
   magnetRadius: number;
-  carrySlots: number;
+  salvage: number; // multiplier on scrap from selling
   intelGain: number; // multiplier
   activeWidth: number; // active reload window, fraction of the reload
   weapon: WeaponStats;
@@ -118,7 +118,7 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
     bladeReach: bl.reach,
     bladeRefund: 1,
     magnetRadius: T.loot.magnetRadius,
-    carrySlots: T.loot.carrySlots + pk.carry,
+    salvage: 1 + pk.salvage,
     intelGain: 1,
     activeWidth: T.gun.activeReload.width,
   };
@@ -153,7 +153,7 @@ export function resolveStats(unlocked: ReadonlySet<string>, loadout: Loadout): E
     bladeReach: v('bladeReach'),
     bladeRefund: v('bladeRefund'),
     magnetRadius: v('magnetRadius'),
-    carrySlots: Math.max(4, Math.round(v('carrySlots'))),
+    salvage: v('salvage'),
     intelGain: v('intelGain'),
     activeWidth: Math.min(T.gun.activeReload.maxWidth, v('activeWidth')),
     weapon: {

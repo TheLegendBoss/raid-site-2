@@ -130,6 +130,7 @@ export function newProfile(): void {
   runState.stash = [];
   runState.carried = [];
   runState.carriedScrap = 0;
+  runState.fresh = [];
   refreshStats();
   runState.hp = runState.maxHp;
   runState.shield = runState.maxShield;
@@ -180,6 +181,20 @@ export function tryUnlock(id: string): UnlockCheck {
 // ------------------------------------------------------- gear and the stash
 
 export type Place = 'carried' | 'stash';
+/** An item has been dealt with: it no longer counts as part of the unreviewed haul. */
+export function dropFresh(item: Item): void {
+  const i = runState.fresh.indexOf(item);
+  if (i >= 0) runState.fresh.splice(i, 1);
+}
+/** Items of the last haul that are still in the stash (not yet sold or dismantled). */
+export function freshHaul(): Item[] {
+  runState.fresh = runState.fresh.filter((i) => runState.stash.includes(i));
+  return runState.fresh;
+}
+/** Accept the haul as it is. */
+export function keepHaul(): void {
+  runState.fresh = [];
+}
 const listOf = (p: Place): Item[] => (p === 'carried' ? runState.carried : runState.stash);
 const remove = (list: Item[], item: Item): boolean => {
   const i = list.indexOf(item);
@@ -204,7 +219,6 @@ export function equip(item: Item, from: Place): boolean {
 /** Move between carried and stash. Banking from the field is extraction; this is the base screen's version. */
 export function move(item: Item, from: Place): boolean {
   const to: Place = from === 'carried' ? 'stash' : 'carried';
-  if (to === 'carried' && runState.carried.length >= profile.stats.carrySlots) return false;
   if (!remove(listOf(from), item)) return false;
   listOf(to).push(item);
   saveProfile();
@@ -214,8 +228,9 @@ export function move(item: Item, from: Place): boolean {
 /** Sell a stashed item for scrap. Base only: carried items must be banked first. */
 export function sell(item: Item): number {
   if (!remove(runState.stash, item)) return 0;
-  const n = sellValue(item);
+  const n = Math.round(sellValue(item) * profile.stats.salvage);
   profile.scrap += n;
+  dropFresh(item);
   saveProfile();
   return n;
 }
@@ -227,6 +242,7 @@ export function sell(item: Item): number {
  */
 export function dismantle(item: Item): number {
   if (!remove(runState.stash, item)) return 0;
+  dropFresh(item);
   const fam = baseOf(item).family;
   profile.analysis[fam] = (profile.analysis[fam] ?? 0) + 1;
   const n = addIntel(dismantleIntel(item)); // saves
@@ -251,6 +267,7 @@ export function buy(baseId: string, rarity: number): Item | null {
 /** Extraction: bank everything carried (the stash has no cap) and carried scrap. */
 export function extractAll(): { items: number; left: number; scrap: number } {
   const items = runState.carried.length;
+  runState.fresh = runState.fresh.concat(runState.carried);
   runState.stash.push(...runState.carried);
   runState.carried = [];
   const scrap = runState.carriedScrap;

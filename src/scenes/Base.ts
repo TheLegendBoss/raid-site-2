@@ -19,7 +19,7 @@ import { BUNKERS } from '../data/missions';
 import { QM, RARITY_LABELS } from '../data/loot';
 import { MOBS } from '../data/mobs';
 import { getSfx, type Sfx } from '../fx/audio';
-import { buy, canBuy, dismantle, equip, move, profile, sell, type Place } from '../game/profile';
+import { buy, canBuy, dismantle, equip, freshHaul, keepHaul, move, profile, sell, type Place } from '../game/profile';
 import type { MissionResult } from '../game/mission';
 import { beginRun } from '../game/run';
 import { runState } from '../game/runState';
@@ -34,7 +34,7 @@ import { snapFont, snapText, uiIcon, uiPanel, type PanelKind } from '../ui/pixel
 type Txt = Phaser.GameObjects.Text;
 type Mode = 'hub' | 'overlay';
 type Page = 'home' | 'armory' | 'quartermaster' | 'deploy';
-type TabId = 'carried' | 'stash' | 'shop';
+type TabId = 'haul' | 'carried' | 'stash' | 'shop';
 type Focus = 'loadout' | 'bunker';
 
 interface Row {
@@ -126,9 +126,10 @@ export class Base extends Phaser.Scene {
     this.mode = data.mode ?? 'hub';
     this.sfx = data.sfx ?? getSfx();
     this.result = data.result ?? null;
-    this.page = this.mode === 'overlay' ? 'armory' : data.page ?? 'home';
+    const haul = this.mode === 'hub' && freshHaul().length > 0;
+    this.page = this.mode === 'overlay' ? 'armory' : haul && this.result?.outcome === 'extracted' ? 'armory' : data.page ?? 'home';
     this.slotFilter = null;
-    this.tab = this.mode === 'overlay' ? 'carried' : 'stash';
+    this.tab = this.mode === 'overlay' ? 'carried' : haul ? 'haul' : 'stash';
     this.sel = 0;
     this.scroll = 0;
     this.homeSel = 4;
@@ -148,7 +149,7 @@ export class Base extends Phaser.Scene {
     this.gfx = this.add.graphics().setDepth(1);
     this.hoverGfx = this.add.graphics().setDepth(4);
     this.keys = this.input.keyboard!.addKeys(
-      'UP,DOWN,LEFT,RIGHT,ENTER,SPACE,E,M,S,D,R,P,O,Q,A,ONE,TWO,THREE,FOUR,FIVE,TAB,ESC,B',
+      'UP,DOWN,LEFT,RIGHT,ENTER,SPACE,E,M,S,D,J,K,R,P,O,Q,A,ONE,TWO,THREE,FOUR,FIVE,TAB,ESC,B',
     ) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on('pointerdown', this.onClick, this);
     this.input.on('pointermove', this.onMove, this);
@@ -181,7 +182,8 @@ export class Base extends Phaser.Scene {
   private tabs(): { id: TabId; label: string }[] {
     if (this.mode === 'hub' && this.page === 'quartermaster') return [{ id: 'shop', label: 'BASELINE GEAR' }];
     const out: { id: TabId; label: string }[] = [];
-    if (this.mode === 'overlay' || runState.carried.length > 0) out.push({ id: 'carried', label: `CARRIED ${runState.carried.length}/${profile.stats.carrySlots}` });
+    if (this.mode === 'hub' && freshHaul().length > 0) out.push({ id: 'haul', label: `NEW HAUL ${freshHaul().length}` });
+    if (this.mode === 'overlay') out.push({ id: 'carried', label: `HAUL ${runState.carried.length}` });
     out.push({ id: 'stash', label: `STASH ${runState.stash.length}` });
     if (this.mode === 'overlay') out.push({ id: 'shop', label: 'QUARTERMASTER' });
     return out;
@@ -189,6 +191,7 @@ export class Base extends Phaser.Scene {
 
   private buildRows(): Row[] {
     const keep = (base: BaseItem): boolean => !this.slotFilter || base.slot === this.slotFilter;
+    if (this.tab === 'haul') return freshHaul().filter((i) => keep(baseOf(i))).map((item) => ({ item }));
     if (this.tab === 'carried') return runState.carried.filter((i) => keep(baseOf(i))).map((item) => ({ item }));
     if (this.tab === 'stash') return runState.stash.filter((i) => keep(baseOf(i))).map((item) => ({ item }));
     const out: Row[] = [];
@@ -238,25 +241,55 @@ export class Base extends Phaser.Scene {
       }];
     }
     const item = row.item!;
-    const from: Place = this.tab === 'stash' ? 'stash' : 'carried';
+    const from: Place = this.tab === 'carried' ? 'carried' : 'stash';
     const inStash = from === 'stash';
     const out: Btn[] = [{ key: 'E', label: 'EQUIP', enabled: true, run: () => this.doEquip(item, from) }];
-    // The pack only matters in the dev room: a bunker run starts with an empty one.
+    // Moving gear between the haul and the stash only matters in the dev room.
     if (this.mode === 'overlay') {
-      out.push({
-        key: 'M', label: inStash ? 'TAKE' : 'STASH',
-        enabled: inStash ? runState.carried.length < profile.stats.carrySlots : true,
-        run: () => this.doMove(item, from),
-      });
+      out.push({ key: 'M', label: inStash ? 'TAKE' : 'STASH', enabled: true, run: () => this.doMove(item, from) });
     }
     out.push(
-      { key: 'S', label: `SELL  ${sellValue(item)}`, enabled: inStash, run: () => this.confirmed('sell', item, () => this.doSell(item)) },
+      { key: 'S', label: `SELL  ${Math.round(sellValue(item) * profile.stats.salvage)}`, enabled: inStash, run: () => this.confirmed('sell', item, () => this.doSell(item)) },
       {
         key: 'D', label: `DISMANTLE  +${dismantleIntel(item)}`, enabled: inStash,
         run: () => this.confirmed('dismantle', item, () => this.doDismantle(item)),
       },
     );
+    if (this.tab === 'haul') {
+      const junk = freshHaul().filter((i) => i.rarity <= 1);
+      out.push(
+        { key: 'J', label: `SELL ALL JUNK (${junk.length})`, enabled: junk.length > 0, run: () => this.doSellJunk(junk) },
+        { key: 'K', label: 'KEEP ALL', enabled: true, run: () => this.doKeepAll() },
+      );
+    }
     return out;
+  }
+
+  private doSellJunk(junk: Item[]): void {
+    let n = 0;
+    for (const i of junk) n += sell(i);
+    this.say(`Sold ${junk.length} common item${junk.length === 1 ? '' : 's'} for ${n} scrap`, PALETTE.scrap);
+    this.sfx.pickup(2);
+    this.sel = 0;
+    this.afterHaul();
+  }
+
+  private doKeepAll(): void {
+    const n = freshHaul().length;
+    keepHaul();
+    this.say(`Kept ${n} item${n === 1 ? '' : 's'} in the stash`, PALETTE.structure);
+    this.sfx.pickup(1);
+    this.afterHaul();
+  }
+
+  /** The haul tab disappears once it is empty: fall back to the stash. */
+  private afterHaul(): void {
+    if (this.tab === 'haul' && freshHaul().length === 0) {
+      this.tab = 'stash';
+      this.sel = 0;
+      this.scroll = 0;
+    }
+    this.render();
   }
 
   /** Valuable items need the action twice. */
@@ -274,7 +307,7 @@ export class Base extends Phaser.Scene {
   }
 
   private after(): void {
-    this.render();
+    this.afterHaul();
   }
 
   private doEquip(item: Item, from: Place): void {
@@ -341,7 +374,7 @@ export class Base extends Phaser.Scene {
     this.slotFilter = null;
     this.sel = 0;
     this.scroll = 0;
-    if (p === 'armory') this.tab = runState.carried.length > 0 ? 'carried' : 'stash';
+    if (p === 'armory') this.tab = this.mode === 'hub' && freshHaul().length > 0 ? 'haul' : 'stash';
     if (p === 'quartermaster') this.tab = 'shop';
     if (p === 'deploy') {
       this.depSel = 0;
@@ -685,7 +718,7 @@ export class Base extends Phaser.Scene {
 
     this.drawChrome(w, h);
     let top = HEADER_H + 14;
-    if (this.result && this.page === 'home') {
+    if (this.result && (this.page === 'home' || this.page === 'armory') && this.mode === 'hub') {
       this.drawResult(24, top, w - 48);
       top += 58;
     }
@@ -726,6 +759,7 @@ export class Base extends Phaser.Scene {
     if (this.page === 'home') return 'UP/DOWN select   ENTER open   P perks   R research   Q quartermaster   A armory   D deploy   ESC title';
     if (this.page === 'deploy') return 'TAB switch gear / bunker   LEFT/RIGHT slot   UP/DOWN choose   ENTER equip or deploy   SPACE deploy   ESC base';
     if (this.page === 'quartermaster') return 'UP/DOWN select   ENTER buy   ESC base';
+    if (this.tab === 'haul') return 'UP/DOWN select   E equip   S sell   D dismantle   J sell all junk   K keep all   ESC base';
     return 'LEFT/RIGHT tabs   UP/DOWN select   E equip   S sell   D dismantle   ESC base';
   }
 
@@ -741,7 +775,7 @@ export class Base extends Phaser.Scene {
     const head = done ? 'BUNKER CLAIMED' : r.outcome === 'extracted' ? 'EXTRACTED' : r.outcome === 'lost' ? 'AUG LOST' : 'RUN ABORTED';
     const bits: string[] = [];
     if (r.outcome === 'extracted') {
-      bits.push(r.items > 0 ? `${r.items} item${r.items > 1 ? 's' : ''} banked` : 'nothing banked');
+      bits.push(r.items > 0 ? `${r.items} item${r.items > 1 ? 's' : ''} hauled out: sort them below` : 'nothing hauled out');
       if (r.scrap > 0) bits.push(`+${r.scrap} scrap`);
       if (r.bonusScrap > 0) bits.push(`+${r.bonusScrap} clear bonus`);
     } else {
@@ -883,15 +917,15 @@ export class Base extends Phaser.Scene {
     if (this.slotFilter) {
       this.text(x + w - 18, y + 16, `filter: ${SLOT_LABELS[this.slotFilter]}`, 12, PALETTE.structure, [1, 0]);
     } else if (this.tab === 'carried' && runState.carriedScrap > 0) {
-      this.text(x + w - 18, y + 16, `+${runState.carriedScrap} scrap carried`, 12, PALETTE.scrap, [1, 0]);
+      this.text(x + w - 18, y + 16, `+${runState.carriedScrap} scrap in the haul`, 12, PALETTE.scrap, [1, 0]);
     }
     this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
     this.gfx.lineBetween(x + 8, y + 40, x + w - 8, y + 40);
 
     if (this.rows.length === 0) {
       const f = this.slotFilter ? ' for this slot' : '';
-      const msg = this.tab === 'carried'
-        ? `Nothing carried${f}. Gear you pick up in a run is lost if you die, until you extract it.`
+      const msg = this.tab === 'carried' || this.tab === 'haul'
+        ? `Nothing in the haul${f}. Everything you pick up in a run is lost if you die, until you extract it.`
         : this.tab === 'stash'
           ? `The stash is empty${f}. Extract from a mission to bank what you carry, or buy baseline gear from the quartermaster.`
           : 'Nothing for sale.';

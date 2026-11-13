@@ -62,7 +62,7 @@ export function statLines(base: BaseItem, rarity: number): StatLine[] {
   const p = base.pack!;
   return [
     line('reserve', 'Reserve', p.reserve * t, String(Math.round(p.reserve * t))),
-    line('carry', 'Carry slots', p.carry, `${p.carry >= 0 ? '+' : ''}${p.carry}`),
+    line('salvage', 'Salvage value', p.salvage, `+${Math.round(p.salvage * 100)}%`),
     line('dash', 'Dash cooldown', p.dashCdMul, `${Math.round(p.dashCdMul * 100)}%`, false),
     line('bcd', 'Blade cooldown', p.bladeCdMul, `${Math.round(p.bladeCdMul * 100)}%`, false),
   ];

@@ -11,7 +11,7 @@ export type StatKey =
   | 'hull' | 'shield' | 'shieldRegenRate' | 'shieldRegenDelay' | 'moveSpeed'
   | 'dashCooldown' | 'gunDamage' | 'spread' | 'reloadTime' | 'magSize'
   | 'reserveMax' | 'bladeDamage' | 'bladeCooldown' | 'bladeReach' | 'bladeRefund'
-  | 'magnetRadius' | 'carrySlots' | 'intelGain' | 'activeWidth';
+  | 'magnetRadius' | 'salvage' | 'intelGain' | 'activeWidth';
 
 /** `add` is flat; `pct` is a fraction (0.1 = +10%). Both stack across nodes. */
 export interface Effect {
@@ -78,7 +78,7 @@ export const STAT_LABELS: Record<StatKey, string> = {
   bladeReach: 'Blade reach',
   bladeRefund: 'Kill refund',
   magnetRadius: 'Loot magnet',
-  carrySlots: 'Carry slots',
+  salvage: 'Salvage value',
   intelGain: 'Intel gained',
 };
 
@@ -96,16 +96,16 @@ export const TREE_NODES: readonly TreeNode[] = [
   { id: 'r_core', tree: R, kind: 'main', name: 'PROGRAMME', icon: 'core', tint: 'cyan', cost: 0, col: 0, row: 1.5,
     desc: 'The reclamation programme. Everything the vaults teach us hangs from here.', effects: [] },
 
-  { id: 'r_carry1', tree: R, kind: 'main', name: 'CARRY RACK I', icon: 'crate', tint: 'amber', cost: 40, requires: 'r_core', col: 1, row: 0,
-    desc: 'Lash more salvage to the frame.', effects: [{ stat: 'carrySlots', add: 2 }] },
+  { id: 'r_carry1', tree: R, kind: 'main', name: 'SALVAGE BENCH I', icon: 'crate', tint: 'amber', cost: 40, requires: 'r_core', col: 1, row: 0,
+    desc: 'Better strip-down tools: gear sells for more scrap.', effects: [{ stat: 'salvage', pct: 0.1 }] },
   { id: 'r_magnet1', tree: R, kind: 'chip', name: 'MAGNET', icon: 'magnet', tint: 'amber', cost: 30, requires: 'r_carry1',
     desc: 'A coil that draws loot in from further away.', effects: [{ stat: 'magnetRadius', pct: 0.35 }] },
-  { id: 'r_carry2', tree: R, kind: 'main', name: 'CARRY RACK II', icon: 'crate', tint: 'amber', cost: 120, requires: 'r_carry1', col: 2, row: 0,
-    desc: 'Frame-mounted racks.', effects: [{ stat: 'carrySlots', add: 3 }] },
+  { id: 'r_carry2', tree: R, kind: 'main', name: 'SALVAGE BENCH II', icon: 'crate', tint: 'amber', cost: 120, requires: 'r_carry1', col: 2, row: 0,
+    desc: 'A proper workshop.', effects: [{ stat: 'salvage', pct: 0.15 }] },
   { id: 'r_magnet2', tree: R, kind: 'chip', name: 'MAGNET II', icon: 'magnet', tint: 'amber', cost: 80, requires: 'r_carry2',
     desc: 'A stronger coil.', effects: [{ stat: 'magnetRadius', pct: 0.35 }] },
-  { id: 'r_carry3', tree: R, kind: 'main', name: 'CARRY RACK III', icon: 'crate', tint: 'amber', cost: 300, requires: 'r_carry2', col: 3, row: 0,
-    desc: 'A full hauling harness.', effects: [{ stat: 'carrySlots', add: 5 }] },
+  { id: 'r_carry3', tree: R, kind: 'main', name: 'SALVAGE BENCH III', icon: 'crate', tint: 'amber', cost: 300, requires: 'r_carry2', col: 3, row: 0,
+    desc: 'Nothing is wasted.', effects: [{ stat: 'salvage', pct: 0.25 }] },
 
   { id: 'r_ammo1', tree: R, kind: 'main', name: 'AMMO LOOM I', icon: 'reserve', tint: 'orange', cost: 50, requires: 'r_core', col: 1, row: 1,
     desc: 'Weave spare rounds into the rig.', effects: [{ stat: 'reserveMax', add: 30 }] },

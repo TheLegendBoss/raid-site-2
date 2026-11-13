@@ -61,8 +61,11 @@ export interface RunState {
   combo: number;
   aimSpread: number; // degrees, for the crosshair
   aimDist: number; // screen px from the player to the cursor, for the crosshair
+  /** The run's haul: everything picked up. No cap; it is sorted out at the end, and lost on death. */
   carried: Item[];
   carriedScrap: number;
+  /** Items banked by the last extraction that the player has not yet reviewed (keep, sell or dismantle). */
+  fresh: Item[];
   stash: Item[];
   weaponName: string;
   weaponShape: string;
@@ -126,6 +129,7 @@ export const runState: RunState = {
   aimDist: 200,
   carried: [],
   carriedScrap: 0,
+  fresh: [],
   stash: [],
   weaponName: TUNING.gun.name,
   weaponShape: 'smg',

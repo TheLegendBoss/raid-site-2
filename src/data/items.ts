@@ -106,7 +106,7 @@ export interface ArmourDef {
 
 export interface PackDef {
   reserve: number;
-  carry: number; // extra carry slots
+  salvage: number; // added to the sell-value multiplier (0.1 = +10%)
   dashCdMul: number;
   bladeCdMul: number;
 }
@@ -200,11 +200,11 @@ export const BASE_ITEMS: readonly BaseItem[] = [
 
   // -------------------------------------------------------------------- pack
   { id: 'stdpack', slot: 'pack', family: 'pack', name: 'Standard Rig', price: 0, weight: 30,
-    desc: 'Balanced.', pack: { reserve: 180, carry: 0, dashCdMul: 1, bladeCdMul: 1 } },
+    desc: 'Balanced.', pack: { reserve: 180, salvage: 0, dashCdMul: 1, bladeCdMul: 1 } },
   { id: 'hauler', slot: 'pack', family: 'pack', name: 'Ammo Hauler', price: 90, weight: 14,
-    desc: 'A huge reserve and more room, at the cost of a slower dash.', pack: { reserve: 300, carry: 2, dashCdMul: 1.15, bladeCdMul: 1 } },
+    desc: 'A huge reserve and more room, at the cost of a slower dash.', pack: { reserve: 300, salvage: 0.1, dashCdMul: 1.15, bladeCdMul: 1 } },
   { id: 'harness', slot: 'pack', family: 'pack', name: 'Light Harness', price: 70, weight: 16,
-    desc: 'Fast cooldowns, a small reserve.', pack: { reserve: 120, carry: -1, dashCdMul: 0.85, bladeCdMul: 0.88 } },
+    desc: 'Fast cooldowns, a small reserve.', pack: { reserve: 120, salvage: 0, dashCdMul: 0.85, bladeCdMul: 0.88 } },
 ];
 
 export const BASE_BY_ID: ReadonlyMap<string, BaseItem> = new Map(BASE_ITEMS.map((b) => [b.id, b]));

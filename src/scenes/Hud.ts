@@ -440,7 +440,7 @@ export class Hud extends Phaser.Scene {
     const g = this.bars;
     this.setText(
       this.carryText,
-      `CARRIED ${s.carried.length}/${profile.stats.carrySlots}${s.carriedScrap > 0 ? `  +${s.carriedScrap} scrap` : ''}   SCRAP ${profile.scrap}   INTEL ${profile.intel}   X extract at a pad${runState.devMode ? '   [B] base   [TAB] trees' : '   [ESC] pause'}`,
+      `HAUL ${s.carried.length}${s.carriedScrap > 0 ? `  +${s.carriedScrap} scrap` : ''}   SCRAP ${profile.scrap}   INTEL ${profile.intel}   X extract at a pad${runState.devMode ? '   [B] base   [TAB] trees' : '   [ESC] pause'}`,
     );
     const cw = this.carryText.width + 36;
     const ch = this.carryText.height + 18;

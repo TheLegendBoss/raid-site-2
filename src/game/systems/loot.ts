@@ -63,7 +63,6 @@ export class LootSystem {
 
   updateDrops(dt: number): void {
     const L = T.loot;
-    this.w.fullWarn -= dt;
     const now = this.g.scene.time.now / 1000;
     for (let i = this.w.drops.length - 1; i >= 0; i--) {
       const d = this.w.drops[i];
@@ -88,15 +87,6 @@ export class LootSystem {
 
       if (dist < L.pickupRadius && d.age > 0.15) {
         const item = d.item;
-        if (item && runState.carried.length >= profile.stats.carrySlots) {
-          // Pack full: the item stays on the floor until there is room.
-          if (this.w.fullWarn <= 0) {
-            pushFeed('Pack full', PALETTE.hostile);
-            this.g.sfx.empty();
-            this.w.fullWarn = 1.2;
-          }
-          continue;
-        }
         const rarity = item ? item.rarity : 0;
         const color = item ? RARITY_COLORS[rarity] : PALETTE.scrap;
         if (item) {
@@ -127,7 +117,7 @@ export class LootSystem {
       return null;
     }
     const r = extractAll();
-    if (r.items > 0) pushFeed(`Extracted ${r.items} item${r.items > 1 ? 's' : ''} to the stash`, PALETTE.structure);
+    if (r.items > 0) pushFeed(`Extracted ${r.items} item${r.items > 1 ? 's' : ''}: review the haul at the base`, PALETTE.structure);
     if (r.scrap > 0) pushFeed(`Banked ${r.scrap} scrap`, PALETTE.scrap);
     setBanner('EXTRACTED', 1.4);
     this.g.sfx.pickup(5);
