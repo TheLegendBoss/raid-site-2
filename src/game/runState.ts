@@ -60,6 +60,7 @@ export interface RunState {
   refundFlash: number; // 0..1, decays: blade kills refund ammo and shield
   combo: number;
   aimSpread: number; // degrees, for the crosshair
+  aimDist: number; // screen px from the player to the cursor, for the crosshair
   carried: Item[];
   carriedScrap: number;
   stash: Item[];
@@ -122,6 +123,7 @@ export const runState: RunState = {
   refundFlash: 0,
   combo: 0,
   aimSpread: TUNING.gun.spread,
+  aimDist: 200,
   carried: [],
   carriedScrap: 0,
   stash: [],

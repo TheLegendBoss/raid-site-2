@@ -232,6 +232,7 @@ export class FeelTest extends Phaser.Scene {
     s.mobsAlive = this.w.mobs.filter((m) => !m.dead).length + this.w.spawnQueue.length;
     s.intermission = this.w.waveLive ? 0 : Math.max(0, this.w.waveTimer);
     s.aimSpread = profile.stats.spread + this.w.bloom;
+    s.aimDist = Math.hypot(this.w.mouseX - this.w.px, this.w.mouseY - this.w.py) * this.cameras.main.zoom;
     s.muted = this.g.sfx.muted;
   }
 

@@ -2,7 +2,8 @@
 import Phaser from 'phaser';
 import { FONT, PALETTE, hex } from '../data/palette';
 import { getSfx } from '../fx/audio';
-import { Menu } from '../ui/menu';
+import { newProfile, profile } from '../game/profile';
+import { Menu, type MenuItem } from '../ui/menu';
 import { showCursor } from '../ui/cursor';
 import { snapFont } from '../ui/pixelUi';
 
@@ -49,14 +50,7 @@ export class Title extends Phaser.Scene {
       .text(0, 0, 'Font: Poco by fontenddev.com (CC BY 4.0)   UI: Waste No Space, Mystery Attic, KabGames (CC0)', { fontFamily: FONT, fontSize: '12px', color: hex(PALETTE.textDim) })
       .setOrigin(0.5, 1).setResolution(1).setDepth(5);
 
-    this.menu = new Menu(
-      this,
-      [
-        { label: 'START', sub: 'Go to the base', run: () => this.go('Base', { mode: 'hub' }) },
-        { label: 'DEV TEST', sub: 'The feel-test room: every key, every system', run: () => this.go('FeelTest', { mode: 'dev' }) },
-      ],
-      360, 58, 14, () => sfx.step(), () => sfx.empty(),
-    );
+    this.buildMenu(false);
     this.keys = this.input.keyboard!.addKeys('UP,DOWN,W,S,ENTER,SPACE') as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on('gameout', () => this.menu.pointerOut());
     this.scale.on('resize', this.layout, this);
@@ -67,6 +61,38 @@ export class Title extends Phaser.Scene {
       this.menu.destroy();
     });
     this.layout();
+  }
+
+  /** The main list; `confirm` swaps in the erase-save question. */
+  private buildMenu(confirm: boolean): void {
+    const sfx = getSfx();
+    this.menu?.destroy();
+    let items: MenuItem[];
+    if (confirm) {
+      items = [
+        { label: 'ERASE SAVE AND START', sub: 'Everything is lost: gear, stash, Intel, research', run: () => { newProfile(); this.go('Base', { mode: 'hub' }); } },
+        { label: 'CANCEL', sub: 'Keep the current save', run: () => this.rebuild(false) },
+      ];
+    } else {
+      const cont: MenuItem = { label: 'CONTINUE', sub: profile.hasSave ? 'Back to the base' : 'No save yet', enabled: profile.hasSave, run: () => this.go('Base', { mode: 'hub' }) };
+      const fresh: MenuItem = {
+        label: 'NEW GAME',
+        sub: profile.hasSave ? 'Start over (asks first)' : 'Begin a new programme',
+        run: () => {
+          if (profile.hasSave) this.rebuild(true);
+          else { newProfile(); this.go('Base', { mode: 'hub' }); }
+        },
+      };
+      const dev: MenuItem = { label: 'DEV TEST', sub: 'The feel-test room: every key, every system', run: () => this.go('FeelTest', { mode: 'dev' }) };
+      items = profile.hasSave ? [cont, fresh, dev] : [fresh, dev];
+    }
+    this.menu = new Menu(this, items, 400, 58, 14, () => sfx.step(), () => sfx.empty());
+    if (this.scale) this.layout();
+  }
+
+  private rebuild(confirm: boolean): void {
+    this.buildMenu(confirm);
+    getSfx().step();
   }
 
   private go(scene: string, data: object): void {

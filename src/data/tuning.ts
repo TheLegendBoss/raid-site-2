@@ -50,10 +50,10 @@ export const TUNING = {
     px: 3,
     iconPx: 2,
     fontSizes: [8, 12, 16, 24, 32, 48, 64, 96],
-    crossPx: 2,
-    reloadBar: { w: 56, h: 6 }, // the active reload bar under the reticle, in px
-    crossGap: 8, // px between the cursor and the inner end of each crosshair arm at zero spread
-    crossSpread: 2.6, // extra px of gap per degree of aim spread
+    crossPx: 2, // the centre dot
+    // The reticle: a ring sized by the spread cone at the cursor's distance, four ticks outside it, and
+    // the active reload drawn on the ring itself.
+    reticle: { ringMin: 8, ringMax: 80, ringReload: 22, ringW: 2, tickGap: 3, tickLen: 6, arcW: 5 },
   },
   /** The pixel weapon in the HUD panel: sprite scale, offset from the panel's gun origin, recoil px per bolt px, rearward px per px dropped for raked magazines (1 / MAG_RAKE_ROWS in art/pixparts/parts.py). */
   pixGun: { scale: 3, x: 4, y: -42, kick: 0.5, magRake: 0.25 },

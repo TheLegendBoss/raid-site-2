@@ -33,6 +33,8 @@ export const profile: {
   equipped: Record<Slot, Item | null>;
   analysis: Record<string, number>;
   claimed: Set<string>;
+  /** A save was found and loaded at boot (or one has been written since). */
+  hasSave: boolean;
   stats: EffectiveStats;
 } = {
   intel: 0,
@@ -41,6 +43,7 @@ export const profile: {
   equipped: startingItems(),
   analysis: {},
   claimed: new Set<string>(),
+  hasSave: false,
   stats: resolveStats(initialUnlocked(), { primary: null, blade: null, armour: null, pack: null }),
 };
 
@@ -87,6 +90,7 @@ export async function loadProfile(): Promise<void> {
       // Version 1 saves (Intel and unlocks only, plus placeholder loot) migrate by keeping Intel and unlocks.
       // Version 2 saves lack the claimed bunkers.
       if (s.version === SAVE_VERSION || s.version === 2 || s.version === 1) {
+        profile.hasSave = true;
         profile.intel = typeof s.intel === 'number' && s.intel >= 0 ? Math.floor(s.intel) : 0;
         profile.unlocked = sanitizeUnlocked(Array.isArray(s.unlocked) ? s.unlocked : []);
         if (s.version === SAVE_VERSION || s.version === 2) {
@@ -115,7 +119,27 @@ export async function loadProfile(): Promise<void> {
   runState.mag = runState.magSize;
 }
 
+/** Start over: a fresh programme, the starting kit and an empty stash, written over the old save. */
+export function newProfile(): void {
+  profile.intel = 0;
+  profile.scrap = 0;
+  profile.unlocked = initialUnlocked();
+  profile.equipped = startingItems();
+  profile.analysis = {};
+  profile.claimed = new Set<string>();
+  runState.stash = [];
+  runState.carried = [];
+  runState.carriedScrap = 0;
+  refreshStats();
+  runState.hp = runState.maxHp;
+  runState.shield = runState.maxShield;
+  runState.mag = runState.magSize;
+  runState.reserve = runState.maxReserve;
+  saveProfile();
+}
+
 export function saveProfile(): void {
+  profile.hasSave = true;
   const s: SaveFile = {
     version: SAVE_VERSION,
     intel: profile.intel,
