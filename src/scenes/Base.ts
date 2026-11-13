@@ -1,6 +1,8 @@
-// The base. In 'hub' mode it is the screen between deployments: a menu (Perks, Research,
-// Quartermaster, Armory, Deploy) and the pages behind it. In 'overlay' mode (dev test only) it opens
-// over the paused room with B and shows just the outfit page, including carried items.
+// The base. In 'hub' mode it is the screen between deployments: a permanent menu rail on the left
+// (Base, Deploy, Armory, Quartermaster, Perks, Research) and the page for the chosen entry beside it.
+// Every page but Base and Deploy has the same shape: a left panel for context, a list in the middle
+// and a detail panel with action buttons on the right. In 'overlay' mode (dev test only) it opens
+// over the paused room with B and shows just the armory page, including the run's haul.
 //
 // Rules shown on the armory page (design 5.5 and 6):
 //  - equip from carried or stash; the replaced item takes its place;
@@ -13,18 +15,22 @@
 // Everything is clickable. The screen is drawn in immediate mode: render() rebuilds the labels when
 // state changes, and hover is a separate overlay so moving the mouse never rebuilds text.
 import Phaser from 'phaser';
-import { FONT, PALETTE, RARITY_COLORS, hex } from '../data/palette';
+import { FONT, PALETTE, RARITY_COLORS, TREE_TINTS, hex } from '../data/palette';
 import { BASE_ITEMS, SLOTS, SLOT_LABELS, type BaseItem, type Slot } from '../data/items';
 import { BUNKERS } from '../data/missions';
+import { NODE_BY_ID, ROOT_IDS, STAT_LABELS, TREE_LABELS, TREE_NODES, type Effect, type StatKey, type TreeId, type TreeNode } from '../data/tree';
+import { drawIcon } from '../fx/treeIcons';
 import { QM, RARITY_LABELS } from '../data/loot';
 import { MOBS } from '../data/mobs';
 import { getSfx, type Sfx } from '../fx/audio';
-import { buy, canBuy, dismantle, equip, freshHaul, keepHaul, move, profile, sell, type Place } from '../game/profile';
+import { buy, canBuy, dismantle, equip, freshHaul, keepHaul, move, profile, sell, tryUnlock, type Place } from '../game/profile';
 import type { MissionResult } from '../game/mission';
 import { beginRun } from '../game/run';
 import { runState } from '../game/runState';
 import { TUNING as T } from '../data/tuning';
 import { statLines, type StatLine } from '../sim/describe';
+import { resolveStats, type Loadout } from '../sim/stats';
+import { checkUnlock } from '../sim/tree';
 import { GUN_KITS, KIT_SLOTS, PART_NAMES } from '../data/gunKits';
 import { pixGunKey, pixMagKey } from '../fx/pixGun';
 import { baseOf, buyPrice, dismantleIntel, rarityLabel, sellValue, type Item } from '../sim/loot';
@@ -33,13 +39,14 @@ import { snapFont, snapText, uiIcon, uiPanel, type PanelKind } from '../ui/pixel
 
 type Txt = Phaser.GameObjects.Text;
 type Mode = 'hub' | 'overlay';
-type Page = 'home' | 'armory' | 'quartermaster' | 'deploy';
-type TabId = 'haul' | 'carried' | 'stash' | 'shop';
+type Page = 'home' | 'deploy' | 'armory' | 'quartermaster' | 'perks' | 'research';
+type TabId = 'haul' | 'carried' | 'stash' | 'shop' | 'avail' | 'locked' | 'owned';
 type Focus = 'loadout' | 'bunker';
 
 interface Row {
   item?: Item; // carried or stash
   shop?: { base: BaseItem; rarity: number };
+  node?: TreeNode; // a perk or research node
 }
 
 /** A gear candidate on the deploy screen. `from` is null for the item already equipped. */
@@ -67,27 +74,85 @@ interface Hit {
   enabled?: boolean;
 }
 
-interface HomeEntry {
-  id: 'perks' | 'research' | 'quartermaster' | 'armory' | 'deploy';
+interface NavEntry {
+  id: Page;
   label: string;
-  key: string;
-  sub: () => string;
+  /** One line under the label; `hot` colours it as something waiting for you. */
+  sub: () => { text: string; hot?: boolean };
+}
+
+/** A suggestion on the Base page. */
+interface NextStep {
+  page: Page;
+  label: string;
+  sub: string;
 }
 
 const HEADER_H = 64;
 const FOOTER_H = 44;
+const RAIL_W = 200;
 const LEFT_W = 330;
 const RIGHT_W = 380;
 const BTN_GAP = 6; // gap between the detail panel's action buttons
 const ROW_H = 40;
 
-const HOME: readonly HomeEntry[] = [
-  { id: 'perks', label: 'PERKS', key: 'P', sub: () => 'Spend Intel on lasting bonuses' },
-  { id: 'research', label: 'RESEARCH', key: 'R', sub: () => 'Unlock new capabilities' },
-  { id: 'quartermaster', label: 'QUARTERMASTER', key: 'Q', sub: () => `Buy baseline gear.  ${profile.scrap} scrap` },
-  { id: 'armory', label: 'ARMORY', key: 'A', sub: () => `Your stash: ${runState.stash.length} item${runState.stash.length === 1 ? '' : 's'}. Equip, sell, dismantle` },
-  { id: 'deploy', label: 'DEPLOY', key: 'D', sub: () => 'Choose your gear, then a bunker' },
+/** What each Perk or Research node can do for you right now. */
+const nodeState = (n: TreeNode): 'owned' | 'avail' | 'locked' =>
+  profile.unlocked.has(n.id) ? 'owned' : !n.requires || profile.unlocked.has(n.requires) ? 'avail' : 'locked';
+const treeNodes = (tree: TreeId): TreeNode[] => TREE_NODES.filter((n) => n.tree === tree && !ROOT_IDS.includes(n.id));
+const affordable = (tree: TreeId): number => treeNodes(tree).filter((n) => nodeState(n) === 'avail' && profile.intel >= n.cost).length;
+
+const NAV: readonly NavEntry[] = [
+  { id: 'home', label: 'BASE', sub: () => ({ text: 'Where you stand' }) },
+  { id: 'deploy', label: 'DEPLOY', sub: () => ({ text: `${profile.claimed.size}/${BUNKERS.length} bunkers claimed` }) },
+  {
+    id: 'armory', label: 'ARMORY',
+    sub: () => {
+      const n = freshHaul().length;
+      return n > 0 ? { text: `${n} new in the haul`, hot: true } : { text: `${runState.stash.length} in the stash` };
+    },
+  },
+  { id: 'quartermaster', label: 'QUARTERMASTER', sub: () => ({ text: `${profile.scrap} scrap to spend` }) },
+  {
+    id: 'perks', label: 'PERKS',
+    sub: () => { const n = affordable('perks'); return n > 0 ? { text: `${n} you can unlock`, hot: true } : { text: 'Lasting bonuses' }; },
+  },
+  {
+    id: 'research', label: 'RESEARCH',
+    sub: () => { const n = affordable('research'); return n > 0 ? { text: `${n} you can unlock`, hot: true } : { text: 'New capabilities' }; },
+  },
 ];
+
+function fmtEffect(e: Effect): string {
+  const parts: string[] = [];
+  if (e.add) parts.push(`${e.add > 0 ? '+' : ''}${e.add}`);
+  if (e.pct) parts.push(`${e.pct > 0 ? '+' : ''}${Math.round(e.pct * 100)}%`);
+  return `${parts.join(' ')} ${STAT_LABELS[e.stat]}`;
+}
+
+/** An effective stat for the Aug panel. */
+function fmtStat(k: StatKey, v: number): string {
+  switch (k) {
+    case 'salvage': case 'intelGain': case 'bladeRefund': case 'activeWidth':
+      return `${Math.round(v * 100)}%`;
+    case 'shieldRegenDelay': case 'dashCooldown': case 'reloadTime': case 'bladeCooldown':
+      return `${v.toFixed(2)}s`;
+    case 'spread':
+      return `${v.toFixed(1)} deg`;
+    case 'hull': case 'shield': case 'moveSpeed': case 'magSize': case 'reserveMax': case 'magnetRadius': case 'bladeReach':
+      return String(Math.round(v));
+    default:
+      return v.toFixed(1);
+  }
+}
+
+/** Stats listed on the Aug panel, in this order. Lower is better for these. */
+const AUG_STATS: readonly StatKey[] = [
+  'hull', 'shield', 'shieldRegenRate', 'shieldRegenDelay', 'moveSpeed', 'dashCooldown',
+  'gunDamage', 'spread', 'reloadTime', 'activeWidth', 'magSize', 'reserveMax',
+  'bladeDamage', 'bladeCooldown', 'bladeReach', 'bladeRefund', 'magnetRadius', 'intelGain', 'salvage',
+];
+const LOWER_IS_BETTER: ReadonlySet<StatKey> = new Set<StatKey>(['shieldRegenDelay', 'dashCooldown', 'spread', 'reloadTime', 'bladeCooldown']);
 
 export class Base extends Phaser.Scene {
   private sfx!: Sfx;
@@ -95,7 +160,7 @@ export class Base extends Phaser.Scene {
   private page: Page = 'home';
   private tab: TabId = 'stash';
   private slotFilter: Slot | null = null;
-  private homeSel = 4;
+  private homeSel = 99;
   private bunkerSel = 0;
   private depSlot: Slot = 'primary';
   private depSel = 0;
@@ -132,7 +197,7 @@ export class Base extends Phaser.Scene {
     this.tab = this.mode === 'overlay' ? 'carried' : haul ? 'haul' : 'stash';
     this.sel = 0;
     this.scroll = 0;
-    this.homeSel = 4;
+    this.homeSel = 99;
     this.bunkerSel = 0;
     this.depSlot = 'primary';
     this.depSel = 0;
@@ -149,7 +214,7 @@ export class Base extends Phaser.Scene {
     this.gfx = this.add.graphics().setDepth(1);
     this.hoverGfx = this.add.graphics().setDepth(4);
     this.keys = this.input.keyboard!.addKeys(
-      'UP,DOWN,LEFT,RIGHT,ENTER,SPACE,E,M,S,D,J,K,R,P,O,Q,A,ONE,TWO,THREE,FOUR,FIVE,TAB,ESC,B',
+      'UP,DOWN,LEFT,RIGHT,ENTER,SPACE,E,M,S,D,J,K,ONE,TWO,THREE,FOUR,FIVE,SIX,TAB,ESC,B,OPEN_BRACKET,CLOSED_BRACKET',
     ) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on('pointerdown', this.onClick, this);
     this.input.on('pointermove', this.onMove, this);
@@ -181,6 +246,15 @@ export class Base extends Phaser.Scene {
 
   private tabs(): { id: TabId; label: string }[] {
     if (this.mode === 'hub' && this.page === 'quartermaster') return [{ id: 'shop', label: 'BASELINE GEAR' }];
+    if (this.page === 'perks' || this.page === 'research') {
+      const all = treeNodes(this.page);
+      const n = (s: string): number => all.filter((x) => nodeState(x) === s).length;
+      return [
+        { id: 'avail', label: `AVAILABLE ${n('avail')}` },
+        { id: 'locked', label: `LOCKED ${n('locked')}` },
+        { id: 'owned', label: `UNLOCKED ${n('owned')}` },
+      ];
+    }
     const out: { id: TabId; label: string }[] = [];
     if (this.mode === 'hub' && freshHaul().length > 0) out.push({ id: 'haul', label: `NEW HAUL ${freshHaul().length}` });
     if (this.mode === 'overlay') out.push({ id: 'carried', label: `HAUL ${runState.carried.length}` });
@@ -191,6 +265,13 @@ export class Base extends Phaser.Scene {
 
   private buildRows(): Row[] {
     const keep = (base: BaseItem): boolean => !this.slotFilter || base.slot === this.slotFilter;
+    if (this.page === 'perks' || this.page === 'research') {
+      const want = this.tab === 'owned' ? 'owned' : this.tab === 'locked' ? 'locked' : 'avail';
+      const list = treeNodes(this.page).filter((n) => nodeState(n) === want);
+      // Things you can pay for now come first, then the cheapest.
+      if (want === 'avail') list.sort((a, b) => Number(profile.intel < a.cost) - Number(profile.intel < b.cost) || a.cost - b.cost);
+      return list.map((node) => ({ node }));
+    }
     if (this.tab === 'haul') return freshHaul().filter((i) => keep(baseOf(i))).map((item) => ({ item }));
     if (this.tab === 'carried') return runState.carried.filter((i) => keep(baseOf(i))).map((item) => ({ item }));
     if (this.tab === 'stash') return runState.stash.filter((i) => keep(baseOf(i))).map((item) => ({ item }));
@@ -232,6 +313,14 @@ export class Base extends Phaser.Scene {
   private buttons(): Btn[] {
     const row = this.current();
     if (!row) return [];
+    if (row.node) {
+      const n = row.node;
+      const owned = nodeState(n) === 'owned';
+      return [{
+        key: 'ENTER', label: owned ? 'UNLOCKED' : `UNLOCK  ${n.cost} INTEL`,
+        enabled: checkUnlock(n.id, profile.unlocked, profile.intel).ok, run: () => this.doUnlock(n),
+      }];
+    }
     if (row.shop) {
       const { base, rarity } = row.shop;
       const price = buyPrice(base, rarity);
@@ -343,6 +432,14 @@ export class Base extends Phaser.Scene {
     this.after();
   }
 
+  private doUnlock(n: TreeNode): void {
+    const c = tryUnlock(n.id);
+    if (!c.ok) return this.deny({ key: 'ENTER', label: '', enabled: false, run: () => undefined });
+    this.say(`Unlocked ${n.name}: ${n.effects.map(fmtEffect).join(', ')}`, TREE_TINTS[n.tint]);
+    this.sfx.pickup(3);
+    this.render();
+  }
+
   private doBuy(base: BaseItem, rarity: number): void {
     const it = buy(base.id, rarity);
     if (!it) {
@@ -359,7 +456,15 @@ export class Base extends Phaser.Scene {
     this.sfx.empty();
     if (b.key === 'S' || b.key === 'D') this.say('Only stashed items can be sold or dismantled.', PALETTE.hostile);
     else if (b.key === 'M') this.say('Your pack is full.', PALETTE.hostile);
-    else if (b.key === 'ENTER') this.say('Not enough scrap.', PALETTE.hostile);
+    else if (b.key === 'ENTER') {
+      const row = this.current();
+      if (row?.node) {
+        const c = checkUnlock(row.node.id, profile.unlocked, profile.intel);
+        if (!c.ok && c.reason === 'owned') this.say('Already unlocked.');
+        else if (!c.ok && c.reason === 'locked') this.say(`Unlock ${NODE_BY_ID.get(row.node.requires!)?.name ?? 'the previous node'} first.`, PALETTE.hostile);
+        else this.say(`Not enough Intel: ${row.node.cost - profile.intel} more needed.`, PALETTE.hostile);
+      } else this.say('Not enough scrap.', PALETTE.hostile);
+    }
     this.render();
   }
 
@@ -376,24 +481,15 @@ export class Base extends Phaser.Scene {
     this.scroll = 0;
     if (p === 'armory') this.tab = this.mode === 'hub' && freshHaul().length > 0 ? 'haul' : 'stash';
     if (p === 'quartermaster') this.tab = 'shop';
+    if (p === 'perks' || p === 'research') {
+      this.tab = treeNodes(p).some((n) => nodeState(n) === 'avail') ? 'avail' : 'owned';
+    }
     if (p === 'deploy') {
       this.depSel = 0;
       this.depFocus = 'bunker';
     }
     this.sfx.step();
     this.render();
-  }
-
-  private openTree(tab: 'research' | 'perks'): void {
-    this.sfx.step();
-    this.scene.pause();
-    this.scene.launch('Tree', { sfx: this.sfx, tab, returnTo: 'Base' });
-    this.scene.bringToTop('Tree');
-  }
-
-  private activate(id: HomeEntry['id']): void {
-    if (id === 'perks' || id === 'research') this.openTree(id);
-    else this.setPage(id);
   }
 
   private deploy(): void {
@@ -449,6 +545,13 @@ export class Base extends Phaser.Scene {
       return this.updateList();
     }
     if (K.JustDown(k.ESC)) return this.back();
+    const num = [k.ONE, k.TWO, k.THREE, k.FOUR, k.FIVE, k.SIX];
+    num.forEach((key, i) => {
+      if (K.JustDown(key)) this.setPage(NAV[i].id);
+    });
+    const at = NAV.findIndex((e) => e.id === this.page);
+    if (K.JustDown(k.OPEN_BRACKET)) this.setPage(NAV[(at + NAV.length - 1) % NAV.length].id);
+    if (K.JustDown(k.CLOSED_BRACKET)) this.setPage(NAV[(at + 1) % NAV.length].id);
     if (this.page === 'home') return this.updateHome();
     if (this.page === 'deploy') return this.updateDeploy();
     this.updateList();
@@ -457,17 +560,16 @@ export class Base extends Phaser.Scene {
   private updateHome(): void {
     const K = Phaser.Input.Keyboard;
     const k = this.keys;
-    if (K.JustDown(k.UP)) this.selectHome(this.homeSel - 1);
-    if (K.JustDown(k.DOWN)) this.selectHome(this.homeSel + 1);
-    if (K.JustDown(k.ENTER) || K.JustDown(k.SPACE)) return this.activate(HOME[this.homeSel].id);
-    const hot: [string, HomeEntry['id']][] = [['P', 'perks'], ['R', 'research'], ['Q', 'quartermaster'], ['A', 'armory'], ['D', 'deploy']];
-    hot.forEach(([key, id], i) => {
-      if (K.JustDown(k[key]) || K.JustDown(k[['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'][i]])) this.activate(id);
-    });
+    if (K.JustDown(k.UP)) this.selectHome(Phaser.Math.Clamp(this.homeSel, 0, this.nextSteps().length - 1) - 1);
+    if (K.JustDown(k.DOWN)) this.selectHome(Phaser.Math.Clamp(this.homeSel, 0, this.nextSteps().length - 1) + 1);
+    if (K.JustDown(k.ENTER) || K.JustDown(k.SPACE)) {
+      const steps = this.nextSteps();
+      this.setPage(steps[Phaser.Math.Clamp(this.homeSel, 0, steps.length - 1)].page);
+    }
   }
 
   private selectHome(i: number): void {
-    const n = Phaser.Math.Clamp(i, 0, HOME.length - 1);
+    const n = Phaser.Math.Clamp(i, 0, this.nextSteps().length - 1);
     if (n === this.homeSel) return;
     this.homeSel = n;
     this.sfx.step();
@@ -555,9 +657,6 @@ export class Base extends Phaser.Scene {
     const k = this.keys;
     const tabs = this.tabs();
     const ti = tabs.findIndex((t) => t.id === this.tab);
-    if (K.JustDown(k.ONE) && tabs[0]) this.setTab(tabs[0].id);
-    if (K.JustDown(k.TWO) && tabs[1]) this.setTab(tabs[1].id);
-    if (K.JustDown(k.THREE) && tabs[2]) this.setTab(tabs[2].id);
     if (K.JustDown(k.LEFT)) this.setTab(tabs[(ti + tabs.length - 1) % tabs.length].id);
     if (K.JustDown(k.RIGHT)) this.setTab(tabs[(ti + 1) % tabs.length].id);
     if (K.JustDown(k.UP)) this.select(this.sel - 1);
@@ -717,21 +816,26 @@ export class Base extends Phaser.Scene {
     g.clear();
 
     this.drawChrome(w, h);
-    let top = HEADER_H + 14;
-    if (this.result && (this.page === 'home' || this.page === 'armory') && this.mode === 'hub') {
-      this.drawResult(24, top, w - 48);
+    const hub = this.mode === 'hub';
+    const x0 = 24 + (hub ? RAIL_W + 16 : 0);
+    const cw = w - x0 - 24;
+    const top0 = HEADER_H + 14;
+    let top = top0;
+    if (hub) this.drawRail(24, top0, RAIL_W, h - FOOTER_H - top0 - 14);
+    if (this.result && (this.page === 'home' || this.page === 'armory') && hub) {
+      this.drawResult(x0, top, cw);
       top += 58;
     }
     const ch = h - FOOTER_H - top - 14;
-    if (this.page === 'home') this.drawHome(24, top, w - 48, ch);
-    else if (this.page === 'deploy') this.drawDeploy(24, top, w - 48, ch);
-    else this.drawOutfit(24, top, w - 48, ch);
+    if (this.page === 'home') this.drawHome(x0, top, cw, ch);
+    else if (this.page === 'deploy') this.drawDeploy(x0, top, cw, ch);
+    else this.drawOutfit(x0, top, cw, ch);
     this.drawHover();
   }
 
   private pageTitle(): string {
     if (this.mode === 'overlay') return '| OUTFIT |';
-    return { home: '| BASE |', armory: '| ARMORY |', quartermaster: '| QUARTERMASTER |', deploy: '| DEPLOY |' }[this.page];
+    return `| ${NAV.find((e) => e.id === this.page)!.label} |`;
   }
 
   private drawChrome(w: number, h: number): void {
@@ -755,12 +859,14 @@ export class Base extends Phaser.Scene {
   }
 
   private hint(): string {
+    const nav = '1-6 or [ ] switch page';
     if (this.mode === 'overlay') return 'LEFT/RIGHT tabs   UP/DOWN select   E equip   M move   S sell   D dismantle   TAB trees   ESC close';
-    if (this.page === 'home') return 'UP/DOWN select   ENTER open   P perks   R research   Q quartermaster   A armory   D deploy   ESC title';
-    if (this.page === 'deploy') return 'TAB switch gear / bunker   LEFT/RIGHT slot   UP/DOWN choose   ENTER equip or deploy   SPACE deploy   ESC base';
-    if (this.page === 'quartermaster') return 'UP/DOWN select   ENTER buy   ESC base';
-    if (this.tab === 'haul') return 'UP/DOWN select   E equip   S sell   D dismantle   J sell all junk   K keep all   ESC base';
-    return 'LEFT/RIGHT tabs   UP/DOWN select   E equip   S sell   D dismantle   ESC base';
+    if (this.page === 'home') return `UP/DOWN select   ENTER go   ${nav}   ESC title`;
+    if (this.page === 'deploy') return `TAB switch gear / bunker   LEFT/RIGHT slot   UP/DOWN choose   ENTER equip or deploy   SPACE deploy   ${nav}`;
+    if (this.page === 'perks' || this.page === 'research') return `LEFT/RIGHT tabs   UP/DOWN select   ENTER unlock   ${nav}   ESC base`;
+    if (this.page === 'quartermaster') return `UP/DOWN select   ENTER buy   ${nav}   ESC base`;
+    if (this.tab === 'haul') return `UP/DOWN select   E equip   S sell   D dismantle   J sell all junk   K keep all   ${nav}`;
+    return `LEFT/RIGHT tabs   UP/DOWN select   E equip   S sell   D dismantle   ${nav}   ESC base`;
   }
 
   private drawResult(x: number, y: number, w: number): void {
@@ -795,37 +901,72 @@ export class Base extends Phaser.Scene {
     });
   }
 
+  // ---- menu rail -------------------------------------------------------------------------------
+
+  private drawRail(x: number, y: number, w: number, h: number): void {
+    this.panel(x, y, w, h);
+    const gap = 8;
+    const bh = Math.min(64, Math.floor((h - 24 - gap * (NAV.length - 1)) / NAV.length));
+    NAV.forEach((e, i) => {
+      const by = y + 12 + i * (bh + gap);
+      const on = e.id === this.page;
+      this.box(on ? 'btn_hover' : 'btn', x + 10, by, w - 20, bh);
+      if (on) {
+        this.gfx.fillStyle(PALETTE.structure, 1);
+        this.gfx.fillRect(x + 16, by + 8, 4, bh - 16);
+      }
+      const label = this.text(x + 30, by + 9, e.label, 14, e.id === 'deploy' ? PALETTE.player : on ? PALETTE.white : PALETTE.text);
+      void label;
+      const sub = e.sub();
+      this.text(x + 30, by + bh - 22, this.fit(sub.text, 11, w - 56), 11, sub.hot ? PALETTE.ammo : PALETTE.textDim);
+      this.text(x + w - 22, by + 9, String(i + 1), 11, PALETTE.textDim, [1, 0]);
+      this.hit(`nav:${e.id}`, x + 10, by, w - 20, bh, () => this.setPage(e.id));
+    });
+  }
+
   // ---- home ------------------------------------------------------------------------------------
 
+  /** Things worth doing next, most urgent first. Deploy is always last. */
+  private nextSteps(): NextStep[] {
+    const out: NextStep[] = [];
+    const fresh = freshHaul().length;
+    if (fresh > 0) out.push({ page: 'armory', label: 'SORT YOUR HAUL', sub: `${fresh} new item${fresh === 1 ? '' : 's'}: keep, sell or dismantle` });
+    const pk = affordable('perks');
+    if (pk > 0) out.push({ page: 'perks', label: 'SPEND INTEL: PERKS', sub: `${pk} you can afford, ${profile.intel} Intel in hand` });
+    const rs = affordable('research');
+    if (rs > 0) out.push({ page: 'research', label: 'SPEND INTEL: RESEARCH', sub: `${rs} you can afford, ${profile.intel} Intel in hand` });
+    out.push({ page: 'deploy', label: 'DEPLOY', sub: 'Choose your gear, then a bunker' });
+    return out;
+  }
+
   private drawHome(x: number, y: number, w: number, h: number): void {
-    const menuW = Math.min(480, Math.floor(w * 0.44));
-    const bh = Math.min(72, Math.floor((h - 32 - 4 * 10) / HOME.length));
-    const menuH = 32 + HOME.length * bh + (HOME.length - 1) * 10;
+    const steps = this.nextSteps();
+    this.homeSel = Phaser.Math.Clamp(this.homeSel, 0, steps.length - 1);
+    const menuW = Math.min(440, Math.floor(w * 0.44));
+    const bh = 64;
+    const menuH = Math.min(h, 52 + steps.length * (bh + 10) + 6);
     this.panel(x, y, menuW, menuH);
-    HOME.forEach((e, i) => {
-      const by = y + 16 + i * (bh + 10);
+    this.text(x + 16, y + 14, 'NEXT', 14, PALETTE.textDim);
+    steps.forEach((e, i) => {
+      const by = y + 40 + i * (bh + 10);
       const on = i === this.homeSel;
-      const deploy = e.id === 'deploy';
+      const deploy = e.page === 'deploy';
       this.box(on ? 'btn_hover' : 'btn', x + 16, by, menuW - 32, bh);
-      if (deploy) {
-        this.gfx.fillStyle(PALETTE.player, 1);
-        this.gfx.fillRect(x + 22, by + 8, 4, bh - 16);
-      } else if (on) {
-        this.gfx.fillStyle(PALETTE.structure, 1);
+      if (deploy || on) {
+        this.gfx.fillStyle(deploy ? PALETTE.player : PALETTE.structure, 1);
         this.gfx.fillRect(x + 22, by + 8, 4, bh - 16);
       }
-      this.text(x + 38, by + 10, e.label, 24, deploy ? PALETTE.player : PALETTE.white);
-      this.text(x + 38, by + bh - 24, e.sub(), 12, PALETTE.textDim);
-      this.text(x + menuW - 30, by + 12, `[${e.key}]`, 12, PALETTE.ammo, [1, 0]);
-      this.hit(`home:${e.id}`, x + 16, by, menuW - 32, bh, () => {
+      this.text(x + 38, by + 10, e.label, 18, deploy ? PALETTE.player : PALETTE.white);
+      this.text(x + 38, by + bh - 24, this.fit(e.sub, 12, menuW - 80), 12, PALETTE.textDim);
+      this.hit(`home:${i}`, x + 16, by, menuW - 32, bh, () => {
         this.homeSel = i;
-        this.activate(e.id);
+        this.setPage(e.page);
       });
     });
 
     // Right: where you stand.
-    const ix = x + menuW + 20;
-    const iw = w - menuW - 20;
+    const ix = x + menuW + 16;
+    const iw = w - menuW - 16;
     this.panel(ix, y, iw, h);
     this.text(ix + 20, y + 16, 'AUG', 14, PALETTE.textDim);
     let ly = y + 40;
@@ -856,7 +997,7 @@ export class Base extends Phaser.Scene {
     ly += 12;
     this.gfx.lineBetween(ix + 14, ly - 4, ix + iw - 14, ly - 4);
     const note = this.text(ix + 20, ly + 8,
-      'Gear is the progression. Take it from the dead, bank it by extracting, and bring something better next time. Carried loot is lost if you die.',
+      'Gear is the progression. Take it from the dead, haul it out by reaching a lift or the last exit, and bring something better next time. The haul is lost if you die.',
       13, PALETTE.textDim);
     note.setWordWrapWidth(iw - 40);
   }
@@ -864,11 +1005,41 @@ export class Base extends Phaser.Scene {
   // ---- outfit page ---------------------------------------------------------------------------
 
   private drawOutfit(x: number, y: number, w: number, h: number): void {
-    this.drawEquipped(x, y, LEFT_W, h);
-    const lx = x + LEFT_W + 20;
-    const lw = Math.max(240, w - LEFT_W - RIGHT_W - 40);
-    this.drawList(lx, y, lw, h);
-    this.drawDetail(x + w - RIGHT_W, y, RIGHT_W, h);
+    const tree = this.page === 'perks' || this.page === 'research';
+    const leftW = Math.round(Phaser.Math.Clamp(w * 0.27, 230, LEFT_W));
+    const rightW = Math.round(Phaser.Math.Clamp(w * 0.33, 300, RIGHT_W));
+    if (tree) this.drawAugStats(x, y, leftW, h);
+    else this.drawEquipped(x, y, leftW, h);
+    this.drawList(x + leftW + 16, y, Math.max(240, w - leftW - rightW - 32), h);
+    this.drawDetail(x + w - rightW, y, rightW, h);
+  }
+
+  /** Perks and Research: the Aug's current stats, with what the selected node would change. */
+  private drawAugStats(x: number, y: number, w: number, h: number): void {
+    this.panel(x, y, w, h);
+    this.text(x + 14, y + 12, 'AUG STATS', 14, PALETTE.textDim);
+    const node = this.current()?.node;
+    let after: ReturnType<typeof resolveStats> | null = null;
+    if (node && nodeState(node) !== 'owned') {
+      after = resolveStats(new Set([...profile.unlocked, node.id]), profile.equipped as Loadout);
+    }
+    const touched = new Set<StatKey>(node ? node.effects.map((e) => e.stat) : []);
+    const lh = Math.min(26, Math.floor((h - 70) / AUG_STATS.length));
+    AUG_STATS.forEach((k, i) => {
+      const ly = y + 42 + i * lh;
+      const cur = profile.stats[k];
+      const hot = touched.has(k);
+      this.text(x + 14, ly, STAT_LABELS[k], 12, hot ? PALETTE.white : PALETTE.textDim);
+      let value = fmtStat(k, cur);
+      let col: number = hot ? PALETTE.white : PALETTE.text;
+      if (after && hot && Math.abs(after[k] - cur) > 1e-6) {
+        const better = LOWER_IS_BETTER.has(k) ? after[k] < cur : after[k] > cur;
+        value = `${value} > ${fmtStat(k, after[k])}`;
+        col = better ? PALETTE.player : PALETTE.hostile;
+      }
+      this.text(x + w - 14, ly, value, 12, col, [1, 0]);
+    });
+    this.text(x + 14, y + h - 22, 'Gear adds to these too.', 11, PALETTE.textDim);
   }
 
   private drawEquipped(x: number, y: number, w: number, h: number): void {
@@ -924,7 +1095,13 @@ export class Base extends Phaser.Scene {
 
     if (this.rows.length === 0) {
       const f = this.slotFilter ? ' for this slot' : '';
-      const msg = this.tab === 'carried' || this.tab === 'haul'
+      const msg = this.tab === 'avail'
+        ? 'Nothing to unlock right now. Check the locked tab: each node needs the one before it.'
+        : this.tab === 'locked'
+          ? 'Nothing locked: everything here is open to you or already yours.'
+          : this.tab === 'owned'
+            ? 'Nothing unlocked yet. Spend Intel on the available tab.'
+            : this.tab === 'carried' || this.tab === 'haul'
         ? `Nothing in the haul${f}. Everything you pick up in a run is lost if you die, until you extract it.`
         : this.tab === 'stash'
           ? `The stash is empty${f}. Extract from a mission to bank what you carry, or buy baseline gear from the quartermaster.`
@@ -940,6 +1117,10 @@ export class Base extends Phaser.Scene {
       const row = this.rows[idx];
       if (!row) break;
       const ry = this.listRect.y + i * ROW_H;
+      if (row.node) {
+        this.drawNodeRow(x, w, ry, idx, row.node);
+        continue;
+      }
       const rarity = row.item ? row.item.rarity : row.shop!.rarity;
       const base = row.item ? baseOf(row.item) : row.shop!.base;
       const col = RARITY_COLORS[rarity];
@@ -964,6 +1145,76 @@ export class Base extends Phaser.Scene {
     }
   }
 
+  private drawNodeRow(x: number, w: number, ry: number, idx: number, n: TreeNode): void {
+    const st = nodeState(n);
+    const col = TREE_TINTS[n.tint];
+    const dim = st === 'locked';
+    this.hit(`row:${idx}`, x + 4, ry, w - 8, ROW_H - 2, () => this.select(idx));
+    if (idx === this.sel) this.box('btn_hover', x + 8, ry, w - 16, ROW_H - 2, 1).setDepth(0.6);
+    this.gfx.fillStyle(col, dim ? 0.4 : 1);
+    this.gfx.fillRect(x + 10, ry + 6, 3, ROW_H - 14);
+    this.text(x + 22, ry + 4, n.name, 14, dim ? PALETTE.textDim : col);
+    this.text(x + 22, ry + 22, this.fit(n.effects.map(fmtEffect).join(', '), 11, w - 150), 11, PALETTE.textDim);
+    let right = `${n.cost} INTEL`;
+    let rc: number = profile.intel >= n.cost ? PALETTE.robot : PALETTE.hostile;
+    if (st === 'owned') {
+      right = 'UNLOCKED';
+      rc = PALETTE.player;
+    } else if (st === 'locked') {
+      right = `needs ${NODE_BY_ID.get(n.requires!)?.name ?? '?'}`;
+      rc = PALETTE.textDim;
+    }
+    this.text(x + w - 14, ry + 10, this.fit(right, 12, 150), 12, rc, [1, 0]);
+  }
+
+  /** A perk or research node: what it does, what it needs, what it opens, and the unlock button. */
+  private drawNodeDetail(x: number, y: number, w: number, h: number, n: TreeNode): void {
+    const col = TREE_TINTS[n.tint];
+    const st = nodeState(n);
+    const ig = this.add.graphics().setDepth(5).setPosition(x + 16 + 28, y + 16 + 28);
+    drawIcon(ig, n.icon, col);
+    this.dyn.push(ig);
+    this.text(x + 86, y + 16, this.fit(n.name, 20, w - 102), 20, col);
+    this.text(x + 86, y + 46, `${TREE_LABELS[n.tree]}   ${n.kind === 'main' ? 'MAIN NODE' : 'UPGRADE'}`, 11, PALETTE.textDim);
+    const stText = st === 'owned' ? 'UNLOCKED' : st === 'avail' ? 'AVAILABLE' : 'LOCKED';
+    const stCol = st === 'owned' ? PALETTE.player : st === 'avail' ? PALETTE.ammo : PALETTE.textDim;
+    this.text(x + 86, y + 64, stText, 12, stCol);
+
+    let dy = y + 92;
+    this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
+    this.gfx.lineBetween(x + 12, dy - 6, x + w - 12, dy - 6);
+    const d = this.text(x + 16, dy, n.desc, 13, PALETTE.text);
+    d.setWordWrapWidth(w - 32);
+    dy += d.height + 16;
+    const kv = (k: string, v: string, c: number = PALETTE.text): void => {
+      this.text(x + 16, dy + 1, k, 11, PALETTE.textDim);
+      const t = this.text(x + 100, dy, v, 13, c);
+      t.setWordWrapWidth(w - 116);
+      dy += Math.max(22, t.height + 6);
+    };
+    for (const e of n.effects) kv('EFFECT', fmtEffect(e), PALETTE.white);
+    if (n.requires) {
+      const p = NODE_BY_ID.get(n.requires);
+      kv('NEEDS', p ? p.name : '?', profile.unlocked.has(n.requires) ? PALETTE.player : PALETTE.hostile);
+    }
+    const kids = TREE_NODES.filter((o) => o.requires === n.id);
+    if (kids.length) kv('OPENS', kids.map((o) => o.name).join(', '));
+    kv('COST', st === 'owned' ? 'paid' : `${n.cost} Intel`, st === 'owned' ? PALETTE.textDim : profile.intel >= n.cost ? PALETTE.robot : PALETTE.hostile);
+    kv('YOU HAVE', `${profile.intel} Intel`, PALETTE.textDim);
+
+    this.btns = this.buttons();
+    const bh = 40;
+    let by = y + h - 16 - this.btns.length * (bh + BTN_GAP) + BTN_GAP;
+    for (const b of this.btns) {
+      const on = b.enabled;
+      this.box(on ? 'btn_hover' : 'btn_dis', x + 16, by, w - 32, bh);
+      this.text(x + 28, by + 13, `[${b.key}]`, 12, on ? PALETTE.ammo : PALETTE.textDim);
+      this.text(x + 96, by + 12, b.label, 15, on ? PALETTE.player : PALETTE.textDim);
+      this.hit(`btn:${b.key}`, x + 16, by, w - 32, bh, () => (b.enabled ? b.run() : this.deny(b)), b.enabled);
+      by += bh + BTN_GAP;
+    }
+  }
+
   private drawDetail(x: number, y: number, w: number, h: number): void {
     this.panel(x, y, w, h);
     const row = this.current();
@@ -971,6 +1222,7 @@ export class Base extends Phaser.Scene {
       this.text(x + 14, y + 14, 'NOTHING SELECTED', 14, PALETTE.textDim);
       return;
     }
+    if (row.node) return this.drawNodeDetail(x, y, w, h, row.node);
     const rarity = row.item ? row.item.rarity : row.shop!.rarity;
     const base = row.item ? baseOf(row.item) : row.shop!.base;
     const col = RARITY_COLORS[rarity];
@@ -984,7 +1236,7 @@ export class Base extends Phaser.Scene {
 
     // Buttons sit at the bottom; the stat lines get whatever room is left above them.
     this.btns = this.buttons();
-    const bh = 32;
+    const bh = this.btns.length > 3 ? 26 : 32;
     const btnTop = y + h - 16 - this.btns.length * (bh + BTN_GAP) + BTN_GAP;
 
     // Stat lines compared with what is equipped in that slot.
@@ -993,7 +1245,8 @@ export class Base extends Phaser.Scene {
     let ly = dy + d.height + 18;
     this.text(x + 16, ly, 'STATS  vs equipped', 11, PALETTE.textDim);
     ly += 17;
-    const lines = statLines(base, rarity);
+    const all = statLines(base, rarity);
+    const lines = all.slice(0, Math.max(3, Math.floor((btnTop - 24 - ly) / 14)));
     // Weapons carry a lot of stats: squeeze the row spacing to fit above the buttons.
     const bottom = btnTop - 24;
     const lh = Math.max(14, Math.min(22, (bottom - ly) / lines.length));
@@ -1071,7 +1324,9 @@ export class Base extends Phaser.Scene {
     const eq = profile.equipped[base.slot];
     if (!eq) return null;
     const mine = new Map(statLines(baseOf(eq), eq.rarity).map((l) => [l.key, l]));
-    for (const l of statLines(base, c.item.rarity).slice(0, 3)) {
+    const lines = statLines(base, c.item.rarity).slice(0, 3);
+    lines.sort((a, b) => Number(b.key === 'dps') - Number(a.key === 'dps'));
+    for (const l of lines) {
       const m = mine.get(l.key);
       if (!m || m.value === 0) continue;
       const diff = l.value - m.value;
@@ -1098,14 +1353,8 @@ export class Base extends Phaser.Scene {
   private drawLoadout(x: number, y: number, w: number, h: number): void {
     this.panel(x, y, w, h);
     this.focusFrame(x, y, w, h, this.depFocus === 'loadout');
-    this.hit('pane:loadout', x, y, w, h, () => {
-      if (this.depFocus !== 'loadout') {
-        this.depFocus = 'loadout';
-        this.render();
-      }
-    });
     this.text(x + 16, y + 12, 'LOADOUT', 14, PALETTE.textDim);
-    this.text(x + w - 16, y + 14, 'click a slot, then a piece of gear', 11, PALETTE.textDim, [1, 0]);
+    this.text(x + w - 16, y + 14, 'click a slot, then click gear to equip it', 11, PALETTE.textDim, [1, 0]);
 
     // Slot tiles.
     const gap = 6;
@@ -1159,7 +1408,7 @@ export class Base extends Phaser.Scene {
         const d = this.diffTag(c);
         if (d) this.text(x + w - 18, ry + 11, d.text, 12, d.color, [1, 0]);
       }
-      this.hit(`drow:${idx}`, x + 4, ry, w - 8, ROW_H - 2, () => (idx === this.depSel && this.depFocus === 'loadout' ? this.equipCand(idx) : this.selectCand(idx)));
+      this.hit(`drow:${idx}`, x + 4, ry, w - 8, ROW_H - 2, () => { this.depSel = idx; this.depFocus = 'loadout'; this.equipCand(idx); });
     }
     if (this.depList.length > visible) {
       const sh = (this.listRect.h * visible) / this.depList.length;
@@ -1172,12 +1421,6 @@ export class Base extends Phaser.Scene {
   private drawBunkers(x: number, y: number, w: number, h: number): void {
     this.panel(x, y, w, h);
     this.focusFrame(x, y, w, h, this.depFocus === 'bunker');
-    this.hit('pane:bunker', x, y, w, h, () => {
-      if (this.depFocus !== 'bunker') {
-        this.depFocus = 'bunker';
-        this.render();
-      }
-    });
     this.text(x + 16, y + 12, 'BUNKER', 14, PALETTE.textDim);
 
     const cardH = 52;
@@ -1222,7 +1465,7 @@ export class Base extends Phaser.Scene {
     const bh = 54;
     const by = y + h - bh - 16;
     const locked = !!b.locked;
-    this.text(x + 18, by - 26, locked ? b.locked! : 'Carried loot is lost if you die. Lifts and the last exit extract it.', 12, locked ? PALETTE.hostile : PALETTE.textDim)
+    this.text(x + 18, by - 26, locked ? b.locked! : 'The haul is lost if you die. Lifts and the last exit get it out.', 12, locked ? PALETTE.hostile : PALETTE.textDim)
       .setWordWrapWidth(w - 36);
     this.box(locked ? 'btn_dis' : 'btn_hover', x + 16, by, w - 32, bh);
     this.text(x + w / 2, by + bh / 2, locked ? 'SEALED' : 'DEPLOY  [SPACE]', 24, locked ? PALETTE.textDim : PALETTE.player, [0.5, 0.5]);

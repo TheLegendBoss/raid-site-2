@@ -1,4 +1,4 @@
-// Pause menu over the room. In a mission, leaving aborts it (carried loot is lost, like dying
+// Pause menu over the room. In a mission, leaving aborts it (the haul is lost, like dying
 // without the death); in the dev test it just goes back to the title.
 import Phaser from 'phaser';
 import { FONT, PALETTE, hex } from '../data/palette';
@@ -50,7 +50,7 @@ export class Pause extends Phaser.Scene {
         { label: sfx.muted ? 'SOUND: OFF' : 'SOUND: ON', sub: 'Toggle all audio', run: () => this.toggleSound() },
         {
           label: mission ? 'ABORT MISSION' : 'EXIT TO TITLE',
-          sub: mission ? 'Back to base. Carried loot is lost.' : undefined,
+          sub: mission ? 'Back to base. The haul is lost.' : undefined,
           run: () => this.leave(),
         },
       ],
