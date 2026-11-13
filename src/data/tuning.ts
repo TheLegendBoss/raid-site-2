@@ -157,7 +157,55 @@ export const TUNING = {
     descendHeal: 0.35, // fraction of max hull restored on descending
     descendAmmo: 0.5, // fraction of max reserve restored on descending
     clearBonusItems: 1, // extra gear drops when the Warden falls, on top of its own
-    waveIntelPerRoom: 2, // a room's waves count this many extra waves per room index toward Intel
+    waveIntelPerRoom: 2, // dev-room Intel scaling
+    cacheMaxRarity: 4, // best minimum rarity a cache's gear can be set to
+    roomClearIntel: 6, // Intel for clearing every enemy in a room (plus 2 per depth)
+    floorIntel: 40, // Intel for taking a floor's exit
+  },
+
+  /** Generated bunker floors: a tile map of rooms and corridors, enemies placed asleep. */
+  dungeon: {
+    tile: 40, // px per tile
+    cols: 96,
+    rows: 64,
+    cellCols: 4, // rooms are placed one per cell of this coarse grid
+    cellRows: 3,
+    corridor: 3, // corridor width in tiles
+    extraLoops: 2, // extra corridors that make loops
+    // Waking up. Sight needs a clear line; noise does not.
+    sight: 440, // px: an idle enemy notices you inside this range with a clear line
+    hearGun: 560, // px: a shot wakes sleepers inside this range (scaled by the weapon's heft)
+    hearBlade: 300,
+    hearBlast: 800, // explosions
+    hearHit: 360, // taking damage: wakes the mob, and its neighbours via the shout
+    shout: 300, // px: a mob that wakes pulls awake the ones around it
+    shoutDelay: [0.12, 0.55], // seconds, so a pack rises together but not in lockstep
+    // Encounter budgets: threat points to spend per room before the bunker's multiplier.
+    budgetBase: 6,
+    budgetPerDepth: 2.4,
+    areaTiles: 110, // open tiles that count as a 1.0 room
+    areaMin: 0.8,
+    areaMax: 1.9,
+    overfill: 1.35, // rooms hold more than the player should face at once; wake them gradually
+    mobCap: 64, // most enemies a floor may start with; the surplus scavengers are trimmed
+    cacheBonus: 1.25, // dead-end rooms hold more guards and a cache
+    cacheRarity: 1, // base minimum rarity of a cache's gear (plus one per 3 depth)
+    flowEvery: 0.18,
+    revealRadius: 9, // tiles of sight on the map
+    mapPx: 3, // minimap px per tile // seconds between pathfinding refreshes
+  },
+
+  hazards: {
+    barrelHp: 24,
+    barrelRadius: 130, // px blast
+    barrelPlayerDamage: 38,
+    barrelMobDamage: 140,
+    barrelKnock: 520,
+    barrelChain: 0.14, // seconds before a neighbouring barrel goes up
+    acidMobDps: 16,
+    acidPlayerTick: 0.5, // seconds between hits on the player
+    acidPlayerDamage: 5,
+    acidPlayerSlow: 0.6, // move-speed factor while wading
   },
 
   waves: {

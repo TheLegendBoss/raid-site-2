@@ -1,14 +1,28 @@
 // Arena bounds and the room layouts: pillars, the pipes enemies pour out of, the entry and exit pads.
+import type { Floor } from '../sim/dungeon';
+import type { Grid } from '../sim/grid';
 import type { Rect } from '../sim/math';
 import { TUNING as T } from './tuning';
 
-export const W = T.world.w;
-export const H = T.world.h;
-export const WALL = T.world.wall;
-export const X0 = WALL;
-export const Y0 = WALL;
-export const X1 = W - WALL;
-export const Y1 = H - WALL;
+// The world's size. These are live bindings: a bunker floor is much bigger than the dev room, and
+// setWorld() resizes them before the scene builds its art and systems.
+export let W: number = T.world.w;
+export let H: number = T.world.h;
+export let WALL: number = T.world.wall;
+export let X0: number = WALL;
+export let Y0: number = WALL;
+export let X1: number = W - WALL;
+export let Y1: number = H - WALL;
+
+export function setWorld(w: number, h: number, wall: number): void {
+  W = w;
+  H = h;
+  WALL = wall;
+  X0 = wall;
+  Y0 = wall;
+  X1 = w - wall;
+  Y1 = h - wall;
+}
 
 export type LayoutId = 'crossroads' | 'colonnade' | 'catwalk' | 'reactor' | 'sanctum';
 
@@ -93,10 +107,14 @@ export const EXTRACTS: PadDef[] = [
   { id: 'exit', x: 0, y: 0, label: 'EXIT' },
 ];
 export const SPAWN = { x: 0, y: 0 };
-export const ARENA = { layout: LAYOUTS.crossroads };
+/** `grid` and `floor` are set only on a generated bunker floor; the dev room is pillars and pipes. */
+export const ARENA: { layout: Layout; grid: Grid | null; floor: Floor | null } = { layout: LAYOUTS.crossroads, grid: null, floor: null };
 
 export function applyLayout(id: LayoutId): Layout {
   const l = LAYOUTS[id];
+  setWorld(T.world.w, T.world.h, T.world.wall);
+  ARENA.grid = null;
+  ARENA.floor = null;
   ARENA.layout = l;
   PILLARS.splice(0, PILLARS.length, ...l.pillars);
   PIPES.splice(0, PIPES.length, ...l.pipes);
@@ -107,6 +125,21 @@ export function applyLayout(id: LayoutId): Layout {
   SPAWN.x = l.entry.x;
   SPAWN.y = l.entry.y;
   return l;
+}
+
+/** Switch the world to a generated bunker floor: its grid is the collision, there are no pillars or pipes. */
+export function applyFloor(f: Floor): void {
+  setWorld(f.grid.w, f.grid.h, 0);
+  ARENA.grid = f.grid;
+  ARENA.floor = f;
+  PILLARS.splice(0, PILLARS.length);
+  PIPES.splice(0, PIPES.length);
+  EXTRACTS[0].x = f.start.x;
+  EXTRACTS[0].y = f.start.y;
+  EXTRACTS[1].x = f.exit.x;
+  EXTRACTS[1].y = f.exit.y;
+  SPAWN.x = f.start.x;
+  SPAWN.y = f.start.y;
 }
 
 applyLayout('crossroads');

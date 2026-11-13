@@ -3,6 +3,7 @@ import { extractAll, profile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE, RARITY_COLORS } from '../../data/palette';
 import { X0, X1, Y0, Y1 } from '../../data/arena';
+import { collide } from '../../sim/collide';
 import { poly } from '../../fx/mobArt';
 import { pushFeed, runState, setBanner } from '../runState';
 import { baseOf, rarityLabel, rollDrop } from '../../sim/loot';
@@ -81,6 +82,7 @@ export class LootSystem {
       }
       d.x = clamp(d.x + d.vx * dt, X0 + 8, X1 - 8);
       d.y = clamp(d.y + d.vy * dt, Y0 + 8, Y1 - 8);
+      collide(d, 6);
       d.gfx.setPosition(d.x, d.y).setRotation(now * 1.4 + d.phase);
       d.glow.setPosition(d.x, d.y).setAlpha(d.baseAlpha * (0.75 + 0.25 * Math.sin(now * 4 + d.phase)));
       d.beam?.setPosition(d.x, d.y);

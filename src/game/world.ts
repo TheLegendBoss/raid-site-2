@@ -3,7 +3,8 @@
 // that systems fill (mobs, bullets, drops).
 import { W, H } from '../data/arena';
 import { TUNING as T } from '../data/tuning';
-import type { RoomPlan } from '../sim/run';
+import type { Floor } from '../sim/dungeon';
+import type { FloorPlan } from '../sim/run';
 import type { Bullet, Drop, Mob, Spawn, SwordState } from './types';
 
 export class World {
@@ -25,6 +26,8 @@ export class World {
   fireCd = 0;
   bloom = 0;
   dashT = 0;
+  /** Move-speed factor from the ground under the player (acid), set each frame by the hazard system. */
+  groundSlow = 1;
   dashCd = 0;
   dashX = 1;
   dashY = 0;
@@ -52,8 +55,10 @@ export class World {
   hotMag = false; // the current magazine was loaded with an active reload
 
   // room
-  /** The bunker room being played; null in the dev test room. */
-  room: RoomPlan | null = null;
+  /** The bunker floor being played; null in the dev test room. */
+  plan: FloorPlan | null = null;
+  /** The generated map of that floor. */
+  floor: Floor | null = null;
   hpMul = 1;
   dmgMul = 1;
   /** Waves that must be beaten before the exit pad opens. */

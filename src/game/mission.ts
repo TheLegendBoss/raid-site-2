@@ -7,9 +7,9 @@ export interface MissionResult {
   lost: number; // carried items (and carried scrap, counted as one) that were lost
   intel: number; // gained during the deployment
   wave: number;
-  /** Rooms cleared and rooms in the run (0 for the dev test). */
-  rooms: number;
-  roomsTotal: number;
+  /** Floors cleared and floors in the run (0 for the dev test). */
+  floors: number;
+  floorsTotal: number;
   /** The Warden fell and you got out: the bunker is claimed. */
   complete: boolean;
   /** Clear bonus paid on top (scrap, Intel). */

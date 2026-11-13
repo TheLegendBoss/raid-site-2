@@ -60,7 +60,7 @@ export class PlayerSystem {
           this.g.sfx.empty();
         }
       }
-      const factor = this.w.sw.state === 'windup' || this.w.sw.state === 'swing' ? P.swingMoveFactor : 1;
+      const factor = (this.w.sw.state === 'windup' || this.w.sw.state === 'swing' ? P.swingMoveFactor : 1) * this.w.groundSlow;
       const tvx = ix * profile.stats.moveSpeed * factor;
       const tvy = iy * profile.stats.moveSpeed * factor;
       const dvx = tvx - this.w.pvx;

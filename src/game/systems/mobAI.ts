@@ -1,11 +1,11 @@
 // Enemy behaviours, one method per kind of brain. The spawner and the loop are in mobs.ts; numbers are
 // in src/data/mobs.ts (MOBS, MOB_AI). Telegraphs are pushed into `lasers`, which mobs.ts draws.
 import Phaser from 'phaser';
-import { PILLARS } from '../../data/arena';
 import { MOB_AI } from '../../data/mobs';
 import { PALETTE } from '../../data/palette';
 import { TUNING as T } from '../../data/tuning';
-import { angleDiff, clamp, segmentIntersectsRect } from '../../sim/math';
+import { lineClear, lineClearWide, rayLength } from '../../sim/collide';
+import { angleDiff, clamp } from '../../sim/math';
 import type { Ctx } from '../ctx';
 import { setBanner } from '../runState';
 import type { Mob } from '../types';
@@ -26,6 +26,11 @@ export interface Brain {
   toPlayer: number;
   ux: number;
   uy: number;
+  /** Where to walk to reach the player: straight at them, or along the pathfinding flow. */
+  hx: number;
+  hy: number;
+  /** A clear way to the player. */
+  sees: boolean;
   lasers: Laser[];
 }
 
@@ -39,7 +44,7 @@ export class MobAI {
   }
 
   private los(m: Mob): boolean {
-    return !PILLARS.some((r) => segmentIntersectsRect(m.x, m.y, this.w.px, this.w.py, r));
+    return lineClear(m.x, m.y, this.w.px, this.w.py);
   }
 
   /** Push away from neighbours so swarms spread instead of stacking. */
@@ -82,7 +87,7 @@ export class MobAI {
 
   /** Close in and hit. Shared by scavengers, the stalker's approach and the brute's walk. */
   private meleeStep(b: Brain, speedMul = 1): void {
-    const { m, dt, dist, toPlayer, ux, uy } = b;
+    const { m, dt, dist, toPlayer, ux, uy, hx, hy } = b;
     const c = m.def.contact!;
     m.wobble += dt * 7;
     m.facing += angleDiff(toPlayer, m.facing) * Math.min(1, 14 * dt);
@@ -90,8 +95,8 @@ export class MobAI {
       const sp = m.speed * speedMul * (m.def.behaviour === 'swarm' ? 0.9 + 0.2 * Math.sin(m.wobble) : 1);
       const { sx, sy } = this.separation(m);
       if (dist > c.range * 0.7) {
-        m.x += (ux * sp + sx) * dt;
-        m.y += (uy * sp + sy) * dt;
+        m.x += (hx * sp + sx) * dt;
+        m.y += (hy * sp + sy) * dt;
       } else {
         m.x += sx * dt;
         m.y += sy * dt;
@@ -164,7 +169,7 @@ export class MobAI {
 
   /** Bloater: walks up and detonates (or you pop it first; it blasts either way). */
   private bomber(b: Brain): void {
-    const { m, dt, dist, toPlayer, ux, uy } = b;
+    const { m, dt, dist, toPlayer, hx, hy } = b;
     const A = MOB_AI.bomber;
     m.wobble += dt * 6;
     m.facing += angleDiff(toPlayer, m.facing) * Math.min(1, 10 * dt);
@@ -181,10 +186,10 @@ export class MobAI {
     if (m.stagger <= 0) {
       const { sx, sy } = this.separation(m);
       const sp = m.speed * (0.9 + 0.2 * Math.sin(m.wobble));
-      m.x += (ux * sp + sx) * dt;
-      m.y += (uy * sp + sy) * dt;
+      m.x += (hx * sp + sx) * dt;
+      m.y += (hy * sp + sy) * dt;
     }
-    if (dist < A.primeRange) {
+    if (dist < A.primeRange && b.sees) {
       m.phase = 'windup';
       m.phaseTime = A.fuse;
       this.g.sfx.charge();
@@ -261,7 +266,7 @@ export class MobAI {
 
   /** Sentries, marksmen and spitters: keep a preferred range, telegraph, then shoot. */
   private ranged(b: Brain): void {
-    const { m, dt, dist, toPlayer, ux, uy } = b;
+    const { m, dt, dist, toPlayer, ux, uy, hx, hy } = b;
     const R = m.def.ranged!;
     const los = this.los(m);
     if (m.stagger > 0) {
@@ -270,13 +275,31 @@ export class MobAI {
       return;
     }
 
+    if (m.phase === 'cover') {
+      // Ducking out of sight to a spot picked after the last burst, then peeking back out.
+      m.phaseTime -= dt;
+      const cx = m.coverX - m.x;
+      const cy = m.coverY - m.y;
+      const cd = Math.hypot(cx, cy);
+      m.facing += angleDiff(toPlayer, m.facing) * Math.min(1, 6 * dt);
+      if (cd > MOB_AI.cover.arrive) {
+        m.x += (cx / cd) * m.speed * MOB_AI.cover.speedMul * dt;
+        m.y += (cy / cd) * m.speed * MOB_AI.cover.speedMul * dt;
+      }
+      if (m.phaseTime <= 0 || (cd <= MOB_AI.cover.arrive && los)) {
+        m.phase = 'move';
+        m.shotCd = rand(0.2, 0.6);
+      }
+      return;
+    }
+
     if (m.phase === 'move') {
       m.facing += angleDiff(toPlayer, m.facing) * Math.min(1, 8 * dt);
       let vx = 0;
       let vy = 0;
       if (dist > R.preferredMax || !los) {
-        vx = ux;
-        vy = uy;
+        vx = hx;
+        vy = hy;
       } else if (dist < R.preferredMin) {
         vx = -ux;
         vy = -uy;
@@ -307,7 +330,7 @@ export class MobAI {
       m.facing = m.aimAngle;
       const k = 1 - clamp(m.phaseTime / R.telegraph, 0, 1);
       if (R.laser) {
-        const len = 1000;
+        const len = rayLength(m.x + Math.cos(m.aimAngle) * 30, m.y + Math.sin(m.aimAngle) * 30, m.aimAngle, 1000);
         b.lasers.push({
           x1: m.x + Math.cos(m.aimAngle) * 30, y1: m.y + Math.sin(m.aimAngle) * 30,
           x2: m.x + Math.cos(m.aimAngle) * len, y2: m.y + Math.sin(m.aimAngle) * len, k, c: PALETTE.robot,
@@ -345,9 +368,32 @@ export class MobAI {
         if (m.shotsLeft <= 0) {
           m.phase = 'move';
           m.shotCd = rand(R.cooldownMin, R.cooldownMax);
+          if (this.w.floor && dist > MOB_AI.cover.minDist && Math.random() < MOB_AI.cover.chance && this.findCover(m)) {
+            m.phase = 'cover';
+            m.phaseTime = rand(MOB_AI.cover.time[0], MOB_AI.cover.time[1]);
+          }
         }
       }
     }
+  }
+
+  /** Looks for a nearby spot the player cannot see that the shooter can walk to; sets coverX/Y. */
+  private findCover(m: Mob): boolean {
+    const C = MOB_AI.cover;
+    const start = Math.random() * Math.PI * 2;
+    for (const d of C.probe) {
+      for (let i = 0; i < 12; i++) {
+        const a = start + (i / 12) * Math.PI * 2;
+        const x = m.x + Math.cos(a) * d;
+        const y = m.y + Math.sin(a) * d;
+        if (lineClear(x, y, this.w.px, this.w.py)) continue;
+        if (!lineClearWide(m.x, m.y, x, y, m.radius)) continue;
+        m.coverX = x;
+        m.coverY = y;
+        return true;
+      }
+    }
+    return false;
   }
 
   private fire(m: Mob, a: number, speed: number, dmg: number, life: number, color: number, bw: number, bh: number): void {
@@ -361,7 +407,7 @@ export class MobAI {
   // ---- the Warden -------------------------------------------------------------------------
 
   private warden(b: Brain): void {
-    const { m, dt, dist, toPlayer, ux, uy } = b;
+    const { m, dt, dist, toPlayer, ux, uy, hx, hy } = b;
     const A = MOB_AI.warden;
     const frac = m.hp / m.maxHp;
     const stage = frac > A.stageHp[0] ? 0 : frac > A.stageHp[1] ? 1 : 2;
@@ -382,8 +428,8 @@ export class MobAI {
       let vx = 0;
       let vy = 0;
       if (dist > A.preferredMax) {
-        vx = ux;
-        vy = uy;
+        vx = hx;
+        vy = hy;
       } else if (dist < A.preferredMin) {
         vx = -ux;
         vy = -uy;
@@ -412,7 +458,7 @@ export class MobAI {
           const a = m.aimAngle + (i - (n - 1) / 2) * (A.fan.arc / (n - 1));
           b.lasers.push({
             x1: m.x + Math.cos(a) * 50, y1: m.y + Math.sin(a) * 50,
-            x2: m.x + Math.cos(a) * 1100, y2: m.y + Math.sin(a) * 1100, k: k * 0.7, c: PALETTE.ember,
+            x2: m.x + Math.cos(a) * rayLength(m.x, m.y, a, 1100), y2: m.y + Math.sin(a) * rayLength(m.x, m.y, a, 1100), k: k * 0.7, c: PALETTE.ember,
           });
         }
       }
@@ -498,7 +544,7 @@ export class MobAI {
         break;
       case 'summon': {
         const n = A.summon.count[stage];
-        for (let i = 0; i < n; i++) this.g.mobSys.queueSpawn(stage === 2 && i % 3 === 2 ? 'bomber' : 'scav', 0.2 + i * 0.25);
+        for (let i = 0; i < n; i++) this.g.mobSys.queueSummon(m, stage === 2 && i % 3 === 2 ? 'bomber' : 'scav', 0.2 + i * 0.25);
         this.g.sfx.explosion();
         this.wardenRest(m, stage);
         break;

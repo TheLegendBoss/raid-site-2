@@ -20,11 +20,16 @@ export function waveBudget(p: WaveParams): number {
   return Math.round((R.budgetBase + R.budgetPerDepth * p.depth + R.budgetPerWave * p.waveIndex) * p.budgetMul);
 }
 
-/** Buy enemies with the budget: weighted picks from everything unlocked at this depth, capped per kind. */
 export function composeWave(p: WaveParams, rng: Rng): WaveEntry[] {
+  return composeBudget(waveBudget(p), p.depth, p.bias, rng);
+}
+
+/** Buy enemies with the budget: weighted picks from everything unlocked at this depth, capped per kind. */
+export function composeBudget(budget: number, depth: number, bias: Partial<Record<MobKind, number>>, rng: Rng): WaveEntry[] {
+  const p = { depth, bias };
   const pool = MOB_KINDS.filter((k) => MOBS[k].weight > 0 && MOBS[k].minDepth <= p.depth);
   const counts = new Map<MobKind, number>();
-  let left = waveBudget(p);
+  let left = budget;
   for (let guard = 0; left > 0 && guard < 200; guard++) {
     const open = pool.filter((k) => MOBS[k].cost <= left && (counts.get(k) ?? 0) < MOBS[k].maxPerWave);
     if (open.length === 0) break;

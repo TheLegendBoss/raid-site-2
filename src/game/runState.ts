@@ -8,7 +8,27 @@ export interface FeedLine {
   age: number;
 }
 
+/** What the minimap needs from a bunker floor: terrain, what has been seen, and a few markers. */
+export interface MapState {
+  cols: number;
+  rows: number;
+  tile: number;
+  /** 1 = solid, per tile. */
+  solid: Uint8Array;
+  /** 1 once the player has seen the tile. */
+  seen: Uint8Array;
+  /** Tile indices seen since the HUD last drew; the HUD empties it. */
+  fresh: number[];
+  px: number;
+  py: number;
+  pads: { x: number; y: number; kind: 'lift' | 'exit' }[];
+  /** Awake enemies on seen tiles, as flat x, y pairs in px. */
+  foes: number[];
+}
+
 export interface RunState {
+  /** The floor map, or null in the dev room. */
+  map: MapState | null;
   hp: number;
   maxHp: number;
   shield: number;
@@ -53,6 +73,10 @@ export interface RunState {
   bossHp: number;
   bossMax: number;
   mobsAlive: number;
+  /** Enemies on this floor still asleep (bunker floors only). */
+  mobsAsleep: number;
+  /** A bunker floor is being played (no waves). */
+  floorMode: boolean;
   intermission: number; // seconds left, 0 if a wave is live
   damageFlash: number; // 0..1, decays
   hitMarker: number; // 0..1, decays
@@ -119,6 +143,9 @@ export const runState: RunState = {
   bossHp: 0,
   bossMax: 0,
   mobsAlive: 0,
+  mobsAsleep: 0,
+  map: null,
+  floorMode: false,
   intermission: 0,
   damageFlash: 0,
   hitMarker: 0,

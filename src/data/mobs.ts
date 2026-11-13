@@ -148,6 +148,8 @@ export const MOB_KINDS = Object.keys(MOBS) as MobKind[];
 
 /** Numbers for the behaviours that are not plain melee or ranged. */
 export const MOB_AI = {
+  /** Shooters that finish a burst may duck out of the player's sight and peek back. */
+  cover: { chance: 0.7, probe: [90, 170, 250], time: [0.9, 1.9], speedMul: 1.15, arrive: 18, minDist: 150 },
   leaper: { triggerMin: 130, triggerMax: 340, windup: 0.5, leapSpeed: 780, leapTime: 0.27, recover: 0.7, cooldownMin: 0.9, cooldownMax: 1.8 },
   bomber: { primeRange: 54, fuse: 0.45, blastRadius: 105, blastDamage: 22, blastKnock: 420, deathBlast: true },
   brute: { triggerRange: 250, windup: 0.8, chargeSpeed: 640, chargeTime: 0.55, recover: 0.95, cooldownMin: 1.2, cooldownMax: 2.2, hitKnock: 520 },

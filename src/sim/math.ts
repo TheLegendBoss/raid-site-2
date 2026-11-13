@@ -141,4 +141,21 @@ export class Rng {
   pick<T>(arr: readonly T[]): T {
     return arr[Math.floor(this.next() * arr.length)];
   }
+
+  /** Whole number in [lo, hi], inclusive. */
+  int(lo: number, hi: number): number {
+    return lo + Math.floor(this.next() * (hi - lo + 1));
+  }
+
+  chance(p: number): boolean {
+    return this.next() < p;
+  }
+
+  shuffle<T>(arr: T[]): T[] {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(this.next() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
 }

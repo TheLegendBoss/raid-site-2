@@ -6,6 +6,7 @@ import type { Glows } from '../fx/glows';
 import type { Particles } from '../fx/particles';
 import type { PlayerRig } from '../fx/playerRig';
 import type { Sfx } from '../fx/audio';
+import type { FlowField } from '../sim/flow';
 import type { Rng } from '../sim/math';
 import type { KeyMap } from './types';
 import type { World } from './world';
@@ -17,6 +18,8 @@ import type { ExtractSystem } from './systems/extract';
 import type { LootSystem } from './systems/loot';
 import type { MobSystem } from './systems/mobs';
 import type { PlayerSystem } from './systems/player';
+import type { HazardSystem } from './systems/hazards';
+import type { ExploreSystem } from './systems/explore';
 
 export class Ctx {
   constructor(
@@ -36,6 +39,8 @@ export class Ctx {
   bladeGfx!: Phaser.GameObjects.Graphics;
   bladeGlow!: Phaser.GameObjects.Image;
   fxGfx!: Phaser.GameObjects.Graphics;
+  /** Pathfinding toward the player on a bunker floor; null in the dev room. */
+  flow: FlowField | null = null;
 
   playerSys!: PlayerSystem;
   gunSys!: GunSystem;
@@ -45,6 +50,8 @@ export class Ctx {
   lootSys!: LootSystem;
   extractSys!: ExtractSystem;
   cam!: CameraSystem;
+  hazards!: HazardSystem;
+  explore!: ExploreSystem;
 
   /** Expanding ring flourish. */
   ring(x: number, y: number, color: number, life: number, to = 5): void {

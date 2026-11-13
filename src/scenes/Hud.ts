@@ -5,7 +5,7 @@ import Phaser from 'phaser';
 import { profile } from '../game/profile';
 import { FONT, PALETTE, hex } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
-import { runState } from '../game/runState';
+import { runState, type MapState } from '../game/runState';
 import { clamp } from '../sim/math';
 import { GUN_KITS } from '../data/gunKits';
 import { pixGunKey, pixMagKey, pixMuzzle } from '../fx/pixGun';
@@ -46,6 +46,10 @@ export class Hud extends Phaser.Scene {
   private magImg!: Phaser.GameObjects.Image;
   private gunFx!: Phaser.GameObjects.Graphics;
   private cross!: Phaser.GameObjects.Graphics;
+  private mapRt: Phaser.GameObjects.RenderTexture | null = null;
+  private mapRef: MapState | null = null;
+  private mapPanel!: Phaser.GameObjects.NineSlice;
+  private mapMarks!: Phaser.GameObjects.Graphics;
   private chromeObjs: Phaser.GameObjects.GameObject[] = [];
   private slotPanels: Phaser.GameObjects.NineSlice[] = [];
   private slotIcons: Phaser.GameObjects.Image[] = [];
@@ -126,6 +130,8 @@ export class Hud extends Phaser.Scene {
     this.gunImg = this.add.image(0, 0, 'pixgun_smg').setOrigin(0, 0).setDepth(6).setVisible(false);
     this.gunFx = this.add.graphics().setDepth(7);
     this.cross = this.add.graphics().setDepth(9);
+    this.mapPanel = uiPanel(this, 'panel', 0, 0, 10, 10).setDepth(4).setAlpha(T.ui.panelAlpha).setVisible(false);
+    this.mapMarks = this.add.graphics().setDepth(5.2);
 
     // Pixel UI objects that change state, not size: pooled and shown or hidden per frame.
     const A = T.ui.panelAlpha;
@@ -234,8 +240,57 @@ export class Hud extends Phaser.Scene {
     this.drawStatus(w);
     this.drawFeedAndBanner(w, h);
     this.drawWeaponPanel(w, h, dt);
+    this.drawMinimap(w, h);
     this.drawCrosshair();
     for (const t of this.allText) snapText(t);
+  }
+
+  /** Bunker floors: a fogged minimap, bottom-left. Terrain is stamped into a texture as tiles are seen. */
+  private drawMinimap(w: number, h: number): void {
+    const map = runState.map;
+    this.mapMarks.clear();
+    if (!map) {
+      this.mapPanel.setVisible(false);
+      this.mapRt?.setVisible(false);
+      return;
+    }
+    const px = T.dungeon.mapPx;
+    const mw = map.cols * px;
+    const mh = map.rows * px;
+    const pad = 8;
+    const x0 = MARGIN + pad;
+    const y0 = h - MARGIN - mh - pad;
+    if (this.mapRef !== map) {
+      this.mapRef = map;
+      this.mapRt?.destroy();
+      this.mapRt = this.add.renderTexture(0, 0, mw, mh).setOrigin(0, 0).setDepth(4.6);
+    }
+    const rt = this.mapRt!;
+    rt.setVisible(true).setPosition(x0, y0);
+    sizePanel(this.mapPanel, MARGIN, y0 - pad, mw + pad * 2, mh + pad * 2);
+    this.mapPanel.setVisible(true);
+    if (map.fresh.length > 0) {
+      for (const i of map.fresh) {
+        const c = i % map.cols;
+        const r = (i - c) / map.cols;
+        if (map.solid[i]) rt.fill(PALETTE.structureDim, 1, c * px, r * px, px, px);
+        else rt.fill(0x16403a, 1, c * px, r * px, px, px);
+      }
+      map.fresh.length = 0;
+      rt.render();
+    }
+    const g = this.mapMarks;
+    for (const p of map.pads) {
+      const i = Math.floor(p.y / map.tile) * map.cols + Math.floor(p.x / map.tile);
+      if (!map.seen[i]) continue;
+      g.fillStyle(p.kind === 'exit' ? PALETTE.ammo : PALETTE.structure, 1);
+      g.fillRect(x0 + (p.x / map.tile) * px - 2, y0 + (p.y / map.tile) * px - 2, 5, 5);
+    }
+    g.fillStyle(PALETTE.hostile, 1);
+    for (let i = 0; i < map.foes.length; i += 2) g.fillRect(x0 + (map.foes[i] / map.tile) * px - 1, y0 + (map.foes[i + 1] / map.tile) * px - 1, 3, 3);
+    g.fillStyle(PALETTE.white, 1);
+    g.fillRect(x0 + (map.px / map.tile) * px - 2, y0 + (map.py / map.tile) * px - 2, 5, 5);
+    void w;
   }
 
   /** Static chrome: the 9-slice panels and bar fields, rebuilt only when the screen size changes. */
@@ -377,12 +432,15 @@ export class Hud extends Phaser.Scene {
     const x = w - MARGIN - STA.w;
     this.setText(this.roomText, s.roomLabel || 'FREE PLAY');
     this.roomText.setColor(hex(s.roomLabel ? PALETTE.text : PALETTE.textDim)).setPosition(x + 18, MARGIN + 12);
-    const waves = s.wave === 0 ? 'WAVE -' : s.waveTotal > 0 ? `WAVE ${s.wave}/${s.waveTotal}` : `WAVE ${s.wave}`;
+    const waves = s.floorMode ? `${s.mobsAlive + s.mobsAsleep} LEFT` : s.wave === 0 ? 'WAVE -' : s.waveTotal > 0 ? `WAVE ${s.wave}/${s.waveTotal}` : `WAVE ${s.wave}`;
     this.setText(this.waveText, waves);
     this.waveText.setPosition(x + 18, MARGIN + 32);
-    this.setText(this.hostText, `${s.mobsAlive} HOSTILE${s.mobsAlive === 1 ? '' : 'S'}`);
+    this.setText(this.hostText, s.floorMode ? `${s.mobsAlive} AWAKE` : `${s.mobsAlive} HOSTILE${s.mobsAlive === 1 ? '' : 'S'}`);
     this.hostText.setColor(hex(s.mobsAlive > 0 ? PALETTE.hostile : PALETTE.textDim)).setPosition(x + STA.w - 18, MARGIN + 38);
-    this.setText(this.subText, s.intermission > 0 ? `NEXT WAVE ${s.intermission.toFixed(1)}s` : s.mobsAlive > 0 ? 'ENGAGED' : 'CLEAR');
+    const sub = s.floorMode
+      ? s.mobsAlive > 0 ? 'ENGAGED' : s.mobsAsleep > 0 ? 'QUIET' : 'FLOOR CLEAR'
+      : s.intermission > 0 ? `NEXT WAVE ${s.intermission.toFixed(1)}s` : s.mobsAlive > 0 ? 'ENGAGED' : 'CLEAR';
+    this.setText(this.subText, sub);
     this.subText.setPosition(x + 18, MARGIN + 70);
     this.setText(this.fpsText, `${Math.round(this.game.loop.actualFps)} FPS${s.muted ? '  MUTED' : ''}`);
     this.fpsText.setPosition(x + STA.w - 18, MARGIN + 70);

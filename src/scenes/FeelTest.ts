@@ -5,11 +5,12 @@
 // This scene is only the loop and the wiring. Rules and effects live in
 // src/game/systems/*, state in src/game/world.ts.
 import Phaser from 'phaser';
-import { H, SPAWN, W, applyLayout } from '../data/arena';
+import { H, SPAWN, W, applyFloor, applyLayout } from '../data/arena';
 import { PALETTE } from '../data/palette';
 import { TUNING as T } from '../data/tuning';
 import { getSfx } from '../fx/audio';
 import { drawFloor } from '../fx/arenaArt';
+import { drawDungeon } from '../fx/dungeonArt';
 import { DamageNumbers } from '../fx/damageNumbers';
 import { Glows } from '../fx/glows';
 import { Particles } from '../fx/particles';
@@ -17,10 +18,12 @@ import { PlayerRig } from '../fx/playerRig';
 import { Ctx } from '../game/ctx';
 import type { MissionResult } from '../game/mission';
 import { addIntel, claimBunker, onStatsChanged, profile } from '../game/profile';
-import { advanceRun, currentRun, currentRoom, endRun } from '../game/run';
+import { advanceRun, currentRun, currentFloor, endRun } from '../game/run';
 import { resetVitals, runState, setBanner } from '../game/runState';
 import { BladeSystem } from '../game/systems/blade';
 import { CameraSystem } from '../game/systems/camera';
+import { HazardSystem } from '../game/systems/hazards';
+import { ExploreSystem } from '../game/systems/explore';
 import { CombatSystem } from '../game/systems/combat';
 import { GunSystem } from '../game/systems/gun';
 import { ExtractSystem } from '../game/systems/extract';
@@ -29,7 +32,10 @@ import { MobSystem } from '../game/systems/mobs';
 import { PlayerSystem } from '../game/systems/player';
 import type { KeyMap } from '../game/types';
 import { World } from '../game/world';
+import { generateFloor } from '../sim/dungeon';
+import { FlowField } from '../sim/flow';
 import { Rng } from '../sim/math';
+import { floorParams } from '../sim/run';
 import { MOBS } from '../data/mobs';
 
 const BULLET_POOL = 360;
@@ -56,15 +62,17 @@ export class FeelTest extends Phaser.Scene {
     this.missionId = run ? run.bunker.id : 'dev';
     this.ending = false;
     this.w = new World();
-    const room = run ? currentRoom() : null;
-    this.w.room = room;
-    if (run && room) {
+    const plan = run ? currentFloor() : null;
+    this.w.plan = plan;
+    if (run && plan) {
       this.w.hpMul = run.bunker.hpMul;
       this.w.dmgMul = run.bunker.dmgMul;
-      this.w.wavesToClear = room.waves.length;
       this.w.bossRarity = run.bunker.bossRarity;
+      this.w.floor = generateFloor(floorParams(plan, run.bunker));
+      applyFloor(this.w.floor);
+    } else {
+      applyLayout('crossroads');
     }
-    applyLayout(room ? room.layout : 'crossroads');
   }
 
   create(): void {
@@ -90,7 +98,12 @@ export class FeelTest extends Phaser.Scene {
     this.input.on('pointerdown', unlock);
     this.input.keyboard!.on('keydown', unlock);
 
-    drawFloor(this);
+    if (this.w.floor) {
+      drawDungeon(this, this.w.floor);
+      g.flow = new FlowField(this.w.floor.grid);
+    } else {
+      drawFloor(this);
+    }
     g.floor = this.add.renderTexture(0, 0, W, H).setOrigin(0, 0).setDepth(-10);
     g.particles = new Particles(this, g.floor);
 
@@ -137,6 +150,8 @@ export class FeelTest extends Phaser.Scene {
     g.lootSys = new LootSystem(g);
     g.extractSys = new ExtractSystem(g);
     g.cam = new CameraSystem(g);
+    g.hazards = new HazardSystem(g);
+    g.explore = new ExploreSystem(g);
 
     this.events.on('resume', () => this.input.keyboard!.resetKeys());
     this.resetWorld(true);
@@ -182,6 +197,8 @@ export class FeelTest extends Phaser.Scene {
     g.gunSys.updateGun(dt);
     g.mobSys.updateSpawner(dt);
     g.mobSys.updateMobs(dt);
+    g.hazards.update(dt);
+    g.explore.update(dt);
     g.gunSys.updateBullets(dt);
     g.lootSys.updateDrops(dt);
     g.extractSys.update(dt);
@@ -222,14 +239,16 @@ export class FeelTest extends Phaser.Scene {
     this.w.prevDashReady = s.dashReady;
     this.w.prevBladeReady = s.bladeReady;
     s.wave = this.w.wave;
-    const room = this.w.room;
-    s.waveTotal = room ? room.waves.length : 0;
-    s.roomLabel = room ? `FLOOR ${room.floor}   ROOM ${room.roomOnFloor}/${room.roomsOnFloor}   #${room.index + 1}/${currentRun()?.plan.rooms.length ?? room.index + 1}` : '';
+    const plan = this.w.plan;
+    s.waveTotal = 0;
+    s.roomLabel = plan ? `FLOOR ${plan.floor} / ${plan.floors}` : '';
+    s.floorMode = !!plan;
     const boss = this.w.mobs.find((m) => m.kind === 'warden' && !m.dead);
     s.bossName = boss ? MOBS.warden.name.toUpperCase() : '';
     s.bossHp = boss ? Math.max(0, boss.hp) : 0;
     s.bossMax = boss ? boss.maxHp : 0;
-    s.mobsAlive = this.w.mobs.filter((m) => !m.dead).length + this.w.spawnQueue.length;
+    s.mobsAlive = this.w.mobs.filter((m) => !m.dead && m.alert).length + this.w.spawnQueue.length;
+    s.mobsAsleep = this.w.mobs.filter((m) => !m.dead && !m.alert).length;
     s.intermission = this.w.waveLive ? 0 : Math.max(0, this.w.waveTimer);
     s.aimSpread = profile.stats.spread + this.w.bloom;
     s.aimDist = Math.hypot(this.w.mouseX - this.w.px, this.w.mouseY - this.w.py) * this.cameras.main.zoom;
@@ -265,6 +284,7 @@ export class FeelTest extends Phaser.Scene {
     if (this.ending) return;
     const next = advanceRun(T.run.descendHeal, T.run.descendAmmo);
     if (!next) return;
+    addIntel(T.run.floorIntel + 10 * (next.floor - 2));
     this.ending = true;
     this.g.sfx.pickup(3);
     this.cameras.main.fadeOut(380, 2, 6, 8);
@@ -299,8 +319,8 @@ export class FeelTest extends Phaser.Scene {
       lost,
       intel: Math.max(0, profile.intel - this.startIntel),
       wave: this.w.wave,
-      rooms: run ? run.roomsCleared + (complete ? 1 : 0) : 0,
-      roomsTotal: run ? run.plan.rooms.length : 0,
+      floors: run ? run.floorsCleared + (complete ? 1 : 0) : 0,
+      floorsTotal: run ? run.plan.plans.length : 0,
       complete,
       bonusScrap,
       bonusIntel,
@@ -332,7 +352,7 @@ export class FeelTest extends Phaser.Scene {
       const pad = this.g.extractSys.padUnder()!;
       if (this.mode === 'mission' && this.g.extractSys.action(pad) === 'descend') return this.descend();
       const r = this.g.lootSys.extract();
-      if (this.mode === 'mission') this.endMission('extracted', r ?? undefined, pad.id === 'exit' && !!this.w.room?.final);
+      if (this.mode === 'mission') this.endMission('extracted', r ?? undefined, pad.id === 'exit' && !!this.w.plan?.final);
     }
     if (this.mode !== 'dev') return;
     if (K.JustDown(this.g.keys.ONE)) this.g.mobSys.queueSwarm(T.waves.swarmSize);
@@ -381,15 +401,20 @@ export class FeelTest extends Phaser.Scene {
     this.w.dead = false;
     this.w.wave = 0;
     this.w.waveLive = false;
-    this.w.waveTimer = this.w.room ? 2.4 : first ? 1.4 : 2;
+    this.w.waveTimer = first ? 1.4 : 2;
     if (this.mode === 'dev') resetVitals();
     this.g.rig.setVisible(true);
     this.g.shieldGfx.setVisible(true);
     this.g.floor.clear();
     this.g.floor.render();
-    if (this.w.room) {
-      const r = this.w.room;
-      setBanner(r.final ? `FLOOR ${r.floor}   THE WARDEN` : `FLOOR ${r.floor}   ROOM ${r.roomOnFloor} / ${r.roomsOnFloor}`, 2.2);
+    if (this.w.plan && this.w.floor) {
+      const p = this.w.plan;
+      this.g.mobSys.spawnEncounters(this.w.floor.spawns);
+      for (const c of this.w.floor.caches) {
+        const n = 1 + (p.depth >= 4 ? 1 : 0);
+        for (let i = 0; i < n; i++) this.g.lootSys.dropLoot(c.x + (i - (n - 1) / 2) * 34, c.y, Math.min(T.run.cacheMaxRarity, T.dungeon.cacheRarity + Math.floor(p.depth / 3)));
+      }
+      setBanner(p.final ? `FLOOR ${p.floor}   THE WARDEN WAITS` : `FLOOR ${p.floor} / ${p.floors}`, 2.2);
     } else if (!first) {
       setBanner('CLONE REGROWN', 1.6);
     }

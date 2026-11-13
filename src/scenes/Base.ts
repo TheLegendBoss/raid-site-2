@@ -889,7 +889,7 @@ export class Base extends Phaser.Scene {
       if (r.outcome === 'lost') bits.push('a new Aug has regrown at the base');
     }
     if (r.intel > 0) bits.push(`+${r.intel} Intel`);
-    if (r.roomsTotal > 0) bits.push(`${r.rooms}/${r.roomsTotal} rooms`);
+    if (r.floorsTotal > 0) bits.push(`${r.floors}/${r.floorsTotal} floors`);
     this.text(x + 22, y + 8, head, 16, color);
     this.text(x + 22, y + 29, bits.join('   '), 12, PALETTE.text);
     const ico = uiIcon(this, 'close', x + w - 34, y + 14).setDepth(5);
@@ -987,10 +987,9 @@ export class Base extends Phaser.Scene {
     ly += 26;
     for (const b of BUNKERS) {
       const claimed = profile.claimed.has(b.id);
-      const floors = b.floors.length;
-      const rooms = b.floors.reduce((a, n) => a + n, 0);
+      const floors = b.floors;
       this.text(ix + 20, ly, b.name, 16, PALETTE.white);
-      this.text(ix + 190, ly + 3, `${floors} floors, ${rooms} rooms`, 12, PALETTE.textDim);
+      this.text(ix + 190, ly + 3, `${floors} floors, ${b.rooms[0]}-${b.rooms[1]} rooms each`, 12, PALETTE.textDim);
       this.text(ix + iw - 20, ly + 2, claimed ? 'CLAIMED' : 'UNCLAIMED', 12, claimed ? PALETTE.player : PALETTE.textDim, [1, 0]);
       ly += 28;
     }
@@ -1440,7 +1439,6 @@ export class Base extends Phaser.Scene {
     });
 
     const b = BUNKERS[this.bunkerSel];
-    const rooms = b.floors.reduce((a, n) => a + n, 0);
     let dy = y + 38 + BUNKERS.length * (cardH + 6) + 8;
     this.gfx.lineStyle(1, PALETTE.structureDim, 0.6);
     this.gfx.lineBetween(x + 12, dy - 4, x + w - 12, dy - 4);
@@ -1454,7 +1452,7 @@ export class Base extends Phaser.Scene {
       t.setWordWrapWidth(w - 130);
       dy += Math.max(20, t.height + 4);
     };
-    kv('LAYOUT', `${b.floors.length} floors, ${rooms} rooms, the Warden at the bottom`);
+    kv('LAYOUT', `${b.floors} floors of ${b.rooms[0]} to ${b.rooms[1]} connected rooms, the Warden on the last`);
     kv('THREATS', b.threats);
     kv('REWARDS', b.rewards);
     kv('ADVICE', b.advice, PALETTE.ammo);

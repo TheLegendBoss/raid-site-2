@@ -37,6 +37,7 @@ export class CombatSystem {
     }
     m.hp -= dmg;
     m.flash = 0.07;
+    if (!m.alert) this.g.mobSys.wake(m, true);
     runState.hitMarker = 1;
     this.g.nums.spawn(m.x, m.y - m.radius - 6, String(dmg), heavy ? 'blade' : resisted ? 'resist' : 'gun');
     // Pellets share one trigger pull: feedback fires once per shot, not once per pellet.
@@ -112,6 +113,7 @@ export class CombatSystem {
     m.dead = true;
     m.gfx.destroy();
     m.bar?.destroy();
+    this.g.mobSys.noteKill(m);
 
     if (byPlayer) {
       if (this.w.comboTimer > 0) runState.combo += 1;
@@ -196,6 +198,7 @@ export class CombatSystem {
     this.g.glows.at(m.x, m.y, col, 3.2, 0.5, 0.3, 0.8);
     this.g.ring(m.x, m.y, col, 0.35, A.blastRadius / 14);
     this.g.sfx.explosion();
+    this.g.mobSys.hear(m.x, m.y, T.dungeon.hearBlast);
     this.w.trauma = Math.min(1, this.w.trauma + 0.28);
     const dx = this.w.px - m.x;
     const dy = this.w.py - m.y;

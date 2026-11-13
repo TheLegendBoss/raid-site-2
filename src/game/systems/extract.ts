@@ -1,6 +1,6 @@
-// Pads: a room's entry and its exit. In a bunker the entry is a lift only in the first room of a floor
-// (it extracts); the exit opens once the room's waves are beaten and descends, or on the last room,
-// extracts with the run complete. In the dev room the entry is always open and the exit opens after a few waves.
+// Pads: a floor's entry and its exit. In a bunker the entry is the lift you came down in (it extracts);
+// the exit descends to the next floor, or on the Warden's floor opens once it has fallen and extracts with
+// the run complete. In the dev room the entry is always open and the exit opens after a few waves.
 // Standing on an open pad is required. Pad art is static (arenaArt); this system
 // owns the small state overlay (open/sealed ring, the pulse while you stand on one) and redraws it
 // only when that state changes.
@@ -43,22 +43,29 @@ export class ExtractSystem {
   }
 
   isOpen(pad: Pad): boolean {
-    if (pad.id === 'entry') return !this.w.room || this.w.room.elevator;
+    const plan = this.w.plan;
+    if (plan) {
+      // A bunker floor: the lift you came down in always takes you back up; the way down is open
+      // unless it is the Warden's floor, where the exit waits for the Warden.
+      if (pad.id === 'entry') return true;
+      return !plan.final || this.w.bossDown;
+    }
+    if (pad.id === 'entry') return true;
     return this.wavesLeft() === 0 && !this.w.waveLive;
   }
 
   /** What using the pad under the player does. */
   action(pad: Pad): PadAction {
-    if (pad.id === 'exit' && this.w.room && !this.w.room.final) return 'descend';
+    if (pad.id === 'exit' && this.w.plan && !this.w.plan.final) return 'descend';
     return 'extract';
   }
 
   private openPrompt(pad: Pad): string {
-    const room = this.w.room;
-    if (!room) return `[X] EXTRACT  (${pad.label})`;
-    if (pad.id === 'entry') return '[X] EXTRACT  (LIFT)';
-    if (room.final) return '[X] EXTRACT  (RUN COMPLETE)';
-    return room.roomOnFloor < room.roomsOnFloor ? '[X] DESCEND  (NEXT ROOM)' : `[X] DESCEND  (FLOOR ${room.floor + 1})`;
+    const plan = this.w.plan;
+    if (!plan) return `[X] EXTRACT  (${pad.label})`;
+    if (pad.id === 'entry') return '[X] EXTRACT  (LIFT UP)';
+    if (plan.final) return '[X] EXTRACT  (RUN COMPLETE)';
+    return `[X] DESCEND  (FLOOR ${plan.floor + 1})`;
   }
 
   /** The pad under the player, if any. */
@@ -79,7 +86,7 @@ export class ExtractSystem {
       return false;
     }
     if (!this.isOpen(pad)) {
-      pushFeed(pad.id === 'entry' ? 'No way back up from here.' : `Exit sealed: clear ${this.wavesLeft()} more wave(s)`, PALETTE.hostile);
+      pushFeed(this.w.plan ? 'The exit is sealed until the Warden falls.' : `Exit sealed: clear ${this.wavesLeft()} more wave(s)`, PALETTE.hostile);
       this.g.sfx.empty();
       return false;
     }
@@ -112,7 +119,9 @@ export class ExtractSystem {
         ? this.openPrompt(under)
         : under.id === 'entry'
           ? ''
-          : `EXIT SEALED  clear ${this.wavesLeft()} more wave(s)`;
+          : this.w.plan
+            ? 'EXIT SEALED  the Warden still stands'
+            : `EXIT SEALED  clear ${this.wavesLeft()} more wave(s)`;
   }
 
   private redraw(under: Pad | null, exitOpen: boolean, entryOpen: boolean): void {

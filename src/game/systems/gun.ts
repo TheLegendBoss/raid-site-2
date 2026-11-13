@@ -2,10 +2,11 @@ import { TUNING as T } from '../../data/tuning';
 import { profile } from '../profile';
 import Phaser from 'phaser';
 import { PALETTE } from '../../data/palette';
-import { X0, X1, Y0, Y1, PILLARS } from '../../data/arena';
+import { X0, X1, Y0, Y1 } from '../../data/arena';
+import { lineClear } from '../../sim/collide';
 import { runState } from '../runState';
 import { rollDamage } from '../../sim/damage';
-import { DEG, clamp, segmentHitsCircle, segmentIntersectsRect } from '../../sim/math';
+import { DEG, clamp, segmentHitsCircle } from '../../sim/math';
 import type { Ctx } from '../ctx';
 
 /** SMG: firing, reload and bullet flight. */
@@ -105,6 +106,7 @@ export class GunSystem {
 
     // Juice: flash, light, casing, recoil, kick, noise. Heavier weapons flash and kick bigger.
     const heft = wp.heft;
+    this.g.mobSys.hear(this.w.px, this.w.py, T.dungeon.hearGun * (0.7 + 0.3 * heft));
     this.g.particles.emit({
       x: mx, y: my, vx: 0, vy: 0, life: 0.045, w: 40 * heft, h: 6 * heft, rot: toCursor,
       color: PALETTE.muzzle, add: true,
@@ -260,14 +262,11 @@ export class GunSystem {
       let spent = b.life <= 0 || nx < X0 || nx > X1 || ny < Y0 || ny > Y1;
 
       if (!spent) {
-        for (const r of PILLARS) {
-          if (segmentIntersectsRect(b.x, b.y, nx, ny, r)) {
-            spent = true;
-            break;
-          }
-        }
+        spent = !lineClear(b.x, b.y, nx, ny);
         if (spent) this.wallSpark(nx, ny, Math.atan2(b.vy, b.vx), b.friendly ? PALETTE.spark : PALETTE.robot);
       }
+
+      if (!spent && this.g.hazards.hitSegment(b.x, b.y, nx, ny, b.dmg)) spent = true;
 
       if (!spent && b.friendly) {
         const ang = Math.atan2(b.vy, b.vx);

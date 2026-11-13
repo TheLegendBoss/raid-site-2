@@ -1,5 +1,6 @@
-// Bunkers: the sites you can deploy to. Each is a run of floors, each floor a few rooms, ending in a
-// Warden. Numbers and copy only; the run generator is src/sim/run.ts.
+// Bunkers: the sites you can deploy to. Each is a run of floors, each floor a generated map of
+// connected rooms, ending in a Warden. Numbers and copy only; the run generator is src/sim/run.ts and
+// the floor generator src/sim/dungeon.ts.
 import type { MobKind } from './mobs';
 
 export interface MissionDef {
@@ -14,16 +15,16 @@ export interface MissionDef {
 }
 
 export interface BunkerDef extends MissionDef {
-  /** Rooms on each floor. The last room of the last floor is the Warden's. */
-  floors: readonly number[];
+  /** How many floors. The last one ends in the Warden's room. */
+  floors: number;
+  /** Rooms on each floor, inclusive range. */
+  rooms: readonly [number, number];
   /** Scales enemy hull, enemy damage and how many enemies a wave budget buys. */
   hpMul: number;
   dmgMul: number;
   budgetMul: number;
   /** Added to a room's depth when deciding which enemies may appear (harder roster sooner). */
   depthBonus: number;
-  /** Waves per ordinary room, inclusive range. */
-  waves: readonly [number, number];
   /** Per-kind weight multipliers: what this site is full of. */
   bias: Partial<Record<MobKind, number>>;
   /** Guaranteed minimum rarity of the Warden's drops. */
@@ -42,8 +43,8 @@ export const BUNKERS: readonly BunkerDef[] = [
     blurb: 'A sealed maintenance silo, cut off from the network. The scavengers got in years ago and never left. Break in, take what the dead left, put down whatever runs the place.',
     threats: 'Scavenger swarms, bloaters, sentries; brutes near the bottom',
     rewards: 'Gear, scrap, Intel',
-    floors: [2, 2, 2],
-    hpMul: 1, dmgMul: 1, budgetMul: 1, depthBonus: 0, waves: [2, 2],
+    floors: 3, rooms: [6, 8],
+    hpMul: 1, dmgMul: 1, budgetMul: 1, depthBonus: 0,
     bias: { scav: 1.4, bomber: 1.4, brute: 1.2, robot: 0.7, sniper: 0.5 },
     bossRarity: 2,
     clear: { scrap: 120, intel: 150 },
@@ -56,8 +57,8 @@ export const BUNKERS: readonly BunkerDef[] = [
     blurb: 'A relay that still talks to something. Its maintenance machines were never told to stop, and they have learned to aim.',
     threats: 'Sentries and marksmen in numbers, stalkers, brutes',
     rewards: 'Better gear, scrap, Intel',
-    floors: [2, 2, 2, 2],
-    hpMul: 1.2, dmgMul: 1.15, budgetMul: 1.15, depthBonus: 1, waves: [2, 3],
+    floors: 4, rooms: [7, 9],
+    hpMul: 1.2, dmgMul: 1.15, budgetMul: 1.15, depthBonus: 1,
     bias: { robot: 1.8, sniper: 1.8, scav: 0.7, leaper: 1.2 },
     bossRarity: 3,
     clear: { scrap: 260, intel: 320 },
@@ -70,8 +71,8 @@ export const BUNKERS: readonly BunkerDef[] = [
     blurb: 'Five floors of cold storage under the old city. Something in the stacks has been feeding what lives here for a long time.',
     threats: 'Stalkers, spitters, brutes, everything else behind them',
     rewards: 'Best gear, scrap, Intel',
-    floors: [2, 2, 2, 2, 2],
-    hpMul: 1.45, dmgMul: 1.3, budgetMul: 1.3, depthBonus: 2, waves: [2, 3],
+    floors: 5, rooms: [8, 10],
+    hpMul: 1.45, dmgMul: 1.3, budgetMul: 1.3, depthBonus: 2,
     bias: { leaper: 1.7, spitter: 1.7, brute: 1.3, bomber: 1.2 },
     bossRarity: 4,
     clear: { scrap: 520, intel: 700 },

@@ -45,6 +45,7 @@ export class BladeSystem {
         sw.dir = sw.dir === 1 ? -1 : 1;
         this.w.swordCd = profile.stats.bladeCooldown;
         this.g.sfx.windup();
+        this.g.mobSys.hear(this.w.px, this.w.py, T.dungeon.hearBlade);
       }
       return;
     }
@@ -135,6 +136,7 @@ export class BladeSystem {
       this.w.sw.hit.add(m);
       this.g.combat.damageMob(m, rollDamage(this.g.rng, profile.stats.bladeDamage, S.damageVariance), ang, 'sword', m.x - Math.cos(ang) * m.radius * 0.5, m.y - Math.sin(ang) * m.radius * 0.5, theta);
     }
+    this.g.hazards.hitArc(theta, reach, S.hitTolerance * DEG, 40);
     // The blade also cuts incoming fire out of the air.
     for (const b of this.w.bullets) {
       if (!b.active || b.friendly) continue;

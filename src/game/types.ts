@@ -8,7 +8,7 @@ export type KeyName =
 export type KeyMap = Record<KeyName, Phaser.Input.Keyboard.Key>;
 
 export type { MobKind };
-export type Phase = 'move' | 'telegraph' | 'burst' | 'windup' | 'charge' | 'recover';
+export type Phase = 'move' | 'telegraph' | 'burst' | 'windup' | 'charge' | 'recover' | 'cover';
 export type Source = 'gun' | 'sword';
 
 export interface Mob {
@@ -41,6 +41,9 @@ export interface Mob {
   shotCd: number;
   aimAngle: number;
   strafe: number;
+  /** Where a shooter is ducking to after a burst (phase 'cover'). */
+  coverX: number;
+  coverY: number;
   /** Enemy damage scale for this bunker. */
   dmgMul: number;
   // The Warden
@@ -49,6 +52,19 @@ export interface Mob {
   bossCd: number;
   bossSpin: number;
   hitDone: boolean; // this charge or leap already connected
+  // Bunker floors: enemies are placed asleep and wake by sight, noise or a neighbour's shout.
+  alert: boolean;
+  /** Counts down to waking, once something has woken it; <= 0 when no wake-up is pending. */
+  wakeT: number;
+  room: number;
+  group: number;
+  /** Called in by the Warden (collapses with it). */
+  summoned: boolean;
+  /** Sideways bias of the approach, so a pack fans out instead of queuing. Radians. */
+  flank: number;
+  /** Seconds since it last had a clear line to the player. */
+  acidT?: number;
+  unseen: number;
 }
 
 export interface Bullet {
@@ -99,6 +115,7 @@ export interface Spawn {
   x: number;
   y: number;
   t: number;
+  summoned?: boolean;
 }
 
 export interface SwordState {
